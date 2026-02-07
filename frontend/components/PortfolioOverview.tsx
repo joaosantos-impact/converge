@@ -237,7 +237,7 @@ export function PortfolioOverview() {
           <ScrollArea className="h-[400px]">
             <div className="divide-y">
               {portfolio.balances
-                .sort((a, b) => b.usdValue - a.usdValue)
+                .sort((a, b) => b.totalValue - a.totalValue)
                 .map((balance, idx) => (
                   <div
                     key={`${balance.asset}-${idx}`}
@@ -250,14 +250,14 @@ export function PortfolioOverview() {
                       <div>
                         <p className="font-medium">{balance.asset}</p>
                         <p className="text-sm text-muted-foreground capitalize">
-                          {balance.exchange}
+                          {balance.exchanges?.join(', ') ?? '—'}
                         </p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium">{formatCurrency(balance.usdValue)}</p>
+                      <p className="font-medium">{formatCurrency(balance.totalValue)}</p>
                       <p className="text-sm text-muted-foreground">
-                        {balance.total.toLocaleString(undefined, { 
+                        {balance.totalAmount.toLocaleString(undefined, { 
                           maximumFractionDigits: 8 
                         })} {balance.asset}
                       </p>
