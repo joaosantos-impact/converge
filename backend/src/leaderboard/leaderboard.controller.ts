@@ -21,6 +21,8 @@ import { PrismaService } from '../prisma/prisma.service';
 const participateSchema = z.object({ participate: z.boolean() });
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
+const MAX_LEADERBOARD = 100;
+const DEFAULT_PAGE_SIZE = 20;
 
 @Controller('api/leaderboard')
 export class LeaderboardController {
@@ -36,10 +38,12 @@ export class LeaderboardController {
   async getRankings(
     @Req() req: Request,
     @Query('period') period?: string,
-    @Query('limit') limitParam?: string,
+    @Query('page') pageParam?: string,
+    @Query('perPage') perPageParam?: string,
   ) {
     const effectivePeriod = period || 'all';
-    const limit = parseInt(limitParam || '50');
+    const page = Math.max(1, parseInt(pageParam || '1', 10) || 1);
+    const perPage = Math.min(DEFAULT_PAGE_SIZE, Math.max(1, parseInt(perPageParam || String(DEFAULT_PAGE_SIZE), 10) || DEFAULT_PAGE_SIZE));
 
     // Try to get current user (optional auth)
     let userId: string | null = null;
@@ -55,7 +59,7 @@ export class LeaderboardController {
       userId = session?.user?.id || null;
     } catch {}
 
-    const cacheKey = `${effectivePeriod}:${limit}`;
+    const cacheKey = effectivePeriod;
     let rankingsBase = this.getCached(cacheKey);
 
     if (!rankingsBase) {
@@ -64,7 +68,7 @@ export class LeaderboardController {
         orderBy: effectivePeriod === 'monthly'
           ? { monthlyPnlPercent: 'desc' }
           : { totalPnlPercent: 'desc' },
-        take: limit,
+        take: MAX_LEADERBOARD,
       });
 
       const userIds = profiles.map((p) => p.userId);
@@ -133,13 +137,24 @@ export class LeaderboardController {
       followingSet = new Set(following.map((f) => f.followingId));
     }
 
-    const rankings = rankingsBase.map((r: any) => ({
+    const totalCount = rankingsBase.length;
+    const start = (page - 1) * perPage;
+    const pageSlice = rankingsBase.slice(start, start + perPage);
+
+    const rankings = pageSlice.map((r: any) => ({
       ...r,
       isFollowing: followingSet.has(r.userId),
       isCurrentUser: r.userId === userId,
     }));
 
-    return { rankings, period: effectivePeriod, participating };
+    return {
+      rankings,
+      period: effectivePeriod,
+      participating,
+      totalCount,
+      page,
+      perPage,
+    };
   }
 
   @Post()

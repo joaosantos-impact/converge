@@ -15,6 +15,8 @@ interface PremiumChartProps {
   data: Array<{ timestamp: string; value: number }>;
   height?: number;
   formatValue?: (v: number) => string;
+  /** Line/gradient color (default amber). Use e.g. #22c55e green, #ef4444 red */
+  strokeColor?: string;
   markers?: Array<{
     timestamp: string;
     value: number;
@@ -61,6 +63,7 @@ export const PremiumChart = memo(function PremiumChart({
   data,
   height = 360,
   formatValue,
+  strokeColor: strokeColorProp,
   markers,
   showAxes = true,
   timeRange = '30d',
@@ -81,7 +84,7 @@ export const PremiumChart = memo(function PremiumChart({
     }));
   }, [data, timeRange]);
 
-  const strokeColor = '#ca8a04';
+  const strokeColor = strokeColorProp ?? '#ca8a04';
   const gradientColor = strokeColor;
   const reactId = useId();
   const gradientId = `premium-gradient-${reactId.replace(/:/g, '')}`;

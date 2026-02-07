@@ -18,26 +18,29 @@ interface RankingUser {
 interface LeaderboardResponse {
   rankings: RankingUser[];
   participating: boolean;
+  totalCount: number;
+  page: number;
+  perPage: number;
 }
 
-async function fetchLeaderboard(period: string): Promise<LeaderboardResponse> {
-  const res = await fetch(`/api/leaderboard?period=${period}`);
+async function fetchLeaderboard(period: string, page: number): Promise<LeaderboardResponse> {
+  const res = await fetch(`/api/leaderboard?period=${period}&page=${page}&perPage=20`);
   if (!res.ok) throw new Error('Failed to fetch leaderboard');
   return res.json();
 }
 
 /**
  * Shared leaderboard hook — uses React Query for caching.
- * Caches per period (all, monthly).
+ * Caches per period and page (max 100 users, 20 per page).
  */
-export function useLeaderboard(period: 'all' | 'monthly') {
+export function useLeaderboard(period: 'all' | 'monthly', page: number = 1) {
   return useQuery({
-    queryKey: ['leaderboard', period],
-    queryFn: () => fetchLeaderboard(period),
+    queryKey: ['leaderboard', period, page],
+    queryFn: () => fetchLeaderboard(period, page),
     staleTime: 2 * 60 * 1000, // 2 min
     gcTime: 10 * 60 * 1000, // 10 min
     retry: 2,
-    refetchOnWindowFocus: false, // avoid unnecessary refetches
+    refetchOnWindowFocus: false,
   });
 }
 

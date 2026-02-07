@@ -231,6 +231,16 @@ export const INTEGRATIONS: Integration[] = [
 
 ];
 
+/** Exchange IDs actually supported by the backend (sync, API). Must match backend SUPPORTED_EXCHANGES. */
+export const SUPPORTED_EXCHANGE_IDS: string[] = [
+  'binance', 'bybit', 'mexc', 'kraken', 'okx', 'kucoin', 'coinbase',
+];
+
+/** Only exchanges that are really integrated (backend supports them). */
+export const EXCHANGE_INTEGRATIONS = INTEGRATIONS.filter(
+  (i) => i.type === 'exchange' && SUPPORTED_EXCHANGE_IDS.includes(i.id),
+);
+
 export function getIntegrationById(id: string): Integration | undefined {
   return INTEGRATIONS.find(i => i.id === id);
 }

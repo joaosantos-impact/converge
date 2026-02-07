@@ -190,28 +190,34 @@ export class SyncService {
           balance.total,
         );
 
-        await this.prisma.balance.upsert({
+        const existing = await this.prisma.balance.findFirst({
           where: {
-            exchangeAccountId_asset: {
-              exchangeAccountId: account.id,
-              asset: balance.asset,
-            },
-          },
-          update: {
-            free: balance.free,
-            locked: balance.locked,
-            total: balance.total,
-            usdValue,
-          },
-          create: {
             exchangeAccountId: account.id,
             asset: balance.asset,
-            free: balance.free,
-            locked: balance.locked,
-            total: balance.total,
-            usdValue,
           },
         });
+
+        const data = {
+          free: balance.free,
+          locked: balance.locked,
+          total: balance.total,
+          usdValue,
+        };
+
+        if (existing) {
+          await this.prisma.balance.update({
+            where: { id: existing.id },
+            data,
+          });
+        } else {
+          await this.prisma.balance.create({
+            data: {
+              exchangeAccountId: account.id,
+              asset: balance.asset,
+              ...data,
+            },
+          });
+        }
       }
 
       // Remove balances for assets that no longer exist on the exchange

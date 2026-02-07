@@ -12,6 +12,7 @@ import { useLivePrices } from '@/lib/price-service';
 import type { TradeData } from '@/lib/types';
 
 import { PremiumChart } from '@/components/PremiumChart';
+import { AssetIcon } from '@/components/AssetIcon';
 
 interface ExchangeBreakdown {
   exchange: string;
@@ -180,9 +181,7 @@ export default function AssetDetailPage() {
       {/* Header with live price */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 bg-muted flex items-center justify-center text-base font-medium">
-            {asset.slice(0, 3)}
-          </div>
+          <AssetIcon symbol={asset} size={48} />
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-medium tracking-tight">{asset}</h1>

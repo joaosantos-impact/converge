@@ -25,11 +25,7 @@ type Step = 'welcome' | 'preferences' | 'integration' | 'connect' | 'done';
 const STEPS: Step[] = ['welcome', 'preferences', 'integration', 'connect', 'done'];
 
 const POPULAR_EXCHANGES = INTEGRATIONS.filter(i => 
-  ['binance', 'coinbase', 'kraken', 'bybit', 'okx', 'kucoin', 'mexc'].includes(i.id)
-);
-
-const POPULAR_WALLETS = INTEGRATIONS.filter(i => 
-  ['metamask', 'phantom', 'ledger', 'trezor', 'trust_wallet'].includes(i.id)
+  i.type === 'exchange' && ['binance', 'coinbase', 'kraken', 'bybit', 'okx', 'kucoin', 'mexc'].includes(i.id)
 );
 
 export function Onboarding({ userName, onComplete }: OnboardingProps) {
@@ -201,50 +197,25 @@ export function Onboarding({ userName, onComplete }: OnboardingProps) {
             <div className="flex flex-col h-full">
               <div className="flex-1">
                 <h1 className="text-2xl font-medium tracking-tight">Liga uma conta</h1>
-                <p className="text-muted-foreground mt-1 mb-6">Escolhe a tua exchange ou wallet principal.</p>
+                <p className="text-muted-foreground mt-1 mb-6">Escolhe a tua exchange principal.</p>
 
-                <div className="mb-4">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Exchanges</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {POPULAR_EXCHANGES.map(i => (
-                      <button
-                        key={i.id}
-                        onClick={() => { setSelectedIntegration(i.id); setForm({ ...form, name: i.name }); }}
-                        className={`flex items-center gap-3 p-3 border transition-all cursor-pointer text-left ${
-                          selectedIntegration === i.id 
-                            ? 'border-foreground bg-muted' 
-                            : 'border-border hover:bg-muted/50'
-                        }`}
-                      >
-                        {hasIcon(i.id) ? <IntegrationIcon id={i.id} size={24} /> : (
-                          <div className="w-6 h-6 flex items-center justify-center text-white text-[10px] font-bold" style={{ backgroundColor: i.color }}>{i.letter}</div>
-                        )}
-                        <span className="font-medium text-sm">{i.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Wallets</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {POPULAR_WALLETS.map(i => (
-                      <button
-                        key={i.id}
-                        onClick={() => { setSelectedIntegration(i.id); setForm({ ...form, name: i.name }); }}
-                        className={`flex items-center gap-3 p-3 border transition-all cursor-pointer text-left ${
-                          selectedIntegration === i.id 
-                            ? 'border-foreground bg-muted' 
-                            : 'border-border hover:bg-muted/50'
-                        }`}
-                      >
-                        {hasIcon(i.id) ? <IntegrationIcon id={i.id} size={24} /> : (
-                          <div className="w-6 h-6 flex items-center justify-center text-white text-[10px] font-bold" style={{ backgroundColor: i.color }}>{i.letter}</div>
-                        )}
-                        <span className="font-medium text-sm">{i.name}</span>
-                      </button>
-                    ))}
-                  </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {POPULAR_EXCHANGES.map(i => (
+                    <button
+                      key={i.id}
+                      onClick={() => { setSelectedIntegration(i.id); setForm({ ...form, name: i.name }); }}
+                      className={`flex items-center gap-3 p-3 border transition-all cursor-pointer text-left ${
+                        selectedIntegration === i.id 
+                          ? 'border-foreground bg-muted' 
+                          : 'border-border hover:bg-muted/50'
+                      }`}
+                    >
+                      {hasIcon(i.id) ? <IntegrationIcon id={i.id} size={24} /> : (
+                        <div className="w-6 h-6 flex items-center justify-center text-white text-[10px] font-bold" style={{ backgroundColor: i.color }}>{i.letter}</div>
+                      )}
+                      <span className="font-medium text-sm">{i.name}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>

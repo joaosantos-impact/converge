@@ -14,7 +14,7 @@ import {
   useExchangeAccountDetails,
   type ExchangeAccount,
 } from '@/hooks/use-exchange-accounts';
-import { INTEGRATIONS, type IntegrationType, type Integration } from '@/lib/integrations';
+import { EXCHANGE_INTEGRATIONS, type Integration } from '@/lib/integrations';
 import { IntegrationIcon, hasIcon } from '@/components/IntegrationIcons';
 import { FadeIn } from '@/components/animations';
 import { toast } from 'sonner';
@@ -26,6 +26,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Drawer,
   DrawerContent,
   DrawerDescription,
@@ -33,7 +43,6 @@ import {
   DrawerTitle,
 } from '@/components/ui/drawer';
 
-type Tab = 'all' | IntegrationType;
 
 /* ─── Eye Icon SVGs ─── */
 function EyeIcon({ className }: { className?: string }) {
@@ -100,6 +109,7 @@ function IntegrationDetails({
   const { data: details, isLoading } = useExchangeAccountDetails(account.id);
   const [deleting, setDeleting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const invalidateAccounts = useInvalidateExchangeAccounts();
 
   const handleSync = async () => {
@@ -125,6 +135,7 @@ function IntegrationDetails({
       const res = await fetch(`/api/exchange-accounts?id=${account.id}`, { method: 'DELETE' });
       if (res.ok) {
         toast.success('Integração removida');
+        setDeleteConfirmOpen(false);
         onDelete();
       } else {
         toast.error('Erro ao remover');
@@ -223,7 +234,7 @@ function IntegrationDetails({
         </Button>
         <Button
           variant="destructive"
-          onClick={handleDelete}
+          onClick={() => setDeleteConfirmOpen(true)}
           disabled={deleting}
           className="px-4"
         >
@@ -235,6 +246,30 @@ function IntegrationDetails({
             </svg>
           )}
         </Button>
+        <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remover integração?</AlertDialogTitle>
+              <AlertDialogDescription>
+                A conta &quot;{account.name}&quot; ({integration.name}) será removida. Os saldos e histórico de trades associados deixarão de ser sincronizados. Esta ação não pode ser desfeita.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                variant="destructive"
+                onClick={(e) => { e.preventDefault(); handleDelete(); }}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <div className="w-4 h-4 border-2 border-background/30 border-t-background animate-spin" />
+                ) : (
+                  'Remover'
+                )}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
@@ -363,7 +398,6 @@ export default function IntegrationsPage() {
   const router = useRouter();
   const isMobile = useIsMobile();
   const [search, setSearch] = useState('');
-  const [tab, setTab] = useState<Tab>('all');
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<ExchangeAccount | null>(null);
   const [dialogMode, setDialogMode] = useState<'add' | 'details' | null>(null);
@@ -427,18 +461,9 @@ export default function IntegrationsPage() {
     invalidateAccounts();
   }, [handleClose, invalidateAccounts]);
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'all', label: 'Todas' },
-    { id: 'exchange', label: 'Exchanges' },
-    { id: 'blockchain', label: 'Blockchains' },
-    { id: 'wallet', label: 'Wallets' },
-  ];
-
-  const filtered = INTEGRATIONS.filter(i => {
-    if (tab !== 'all' && i.type !== tab) return false;
-    if (search) return i.name.toLowerCase().includes(search.toLowerCase());
-    return true;
-  });
+  const filtered = EXCHANGE_INTEGRATIONS.filter((i) =>
+    search ? i.name.toLowerCase().includes(search.toLowerCase()) : true
+  );
 
   const connectedCount = connectedIds.length;
 
@@ -486,7 +511,7 @@ export default function IntegrationsPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-medium tracking-tight">Integrações</h1>
-            <p className="text-sm text-muted-foreground">Exchanges, wallets e blockchains</p>
+            <p className="text-sm text-muted-foreground">Exchanges</p>
           </div>
           <div className="flex items-center gap-2">
             {connectedCount > 0 && (
@@ -499,17 +524,8 @@ export default function IntegrationsPage() {
         </div>
       </FadeIn>
 
-      {/* Tabs + Search */}
+      {/* Search */}
       <div className="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
-        <div className="flex gap-1 p-1 bg-muted w-fit">
-          {tabs.map(t => (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`px-4 py-1.5 text-sm font-medium transition-colors ${tab === t.id ? 'bg-background text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
         <div className="relative w-full sm:w-64">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
           <Input placeholder="Procurar..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />

@@ -14,6 +14,7 @@ import {
   Layers
 } from 'lucide-react';
 import type { PortfolioSummary } from '@/lib/types';
+import { AssetIcon } from '@/components/AssetIcon';
 import { toast } from 'sonner';
 
 export function PortfolioOverview() {
@@ -244,9 +245,7 @@ export function PortfolioOverview() {
                     className="flex items-center justify-between px-6 py-4 hover:bg-muted/50 transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted font-semibold text-sm">
-                        {balance.asset.slice(0, 2)}
-                      </div>
+                      <AssetIcon symbol={balance.asset} size={40} />
                       <div>
                         <p className="font-medium">{balance.asset}</p>
                         <p className="text-sm text-muted-foreground capitalize">

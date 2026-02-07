@@ -7,7 +7,9 @@ export type SupportedExchange =
   | 'bybit'
   | 'mexc'
   | 'kraken'
-  | 'okx';
+  | 'okx'
+  | 'kucoin'
+  | 'coinbase';
 
 export interface ExchangeConfig {
   apiKey: string;
@@ -26,6 +28,8 @@ export const SUPPORTED_EXCHANGES: Array<{
   { id: 'mexc', name: 'MEXC', icon: '🔵' },
   { id: 'kraken', name: 'Kraken', icon: '🟣' },
   { id: 'okx', name: 'OKX', icon: '⚫' },
+  { id: 'kucoin', name: 'KuCoin', icon: '🟢' },
+  { id: 'coinbase', name: 'Coinbase', icon: '🔵' },
 ];
 
 @Injectable()

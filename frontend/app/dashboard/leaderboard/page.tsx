@@ -15,12 +15,15 @@ export default function LeaderboardPage() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
   const [period, setPeriod] = useState<'all' | 'monthly'>('all');
+  const [page, setPage] = useState(1);
   const [togglingParticipation, setTogglingParticipation] = useState(false);
 
-  // React Query for leaderboard data (cached per period)
-  const { data: leaderboardData, isLoading: initialLoading, isFetching: fetching, error: leaderboardError } = useLeaderboard(period);
+  const { data: leaderboardData, isLoading: initialLoading, isFetching: fetching, error: leaderboardError } = useLeaderboard(period, page);
   const invalidateLeaderboard = useInvalidateLeaderboard();
   const rankings = leaderboardData?.rankings || [];
+  const totalCount = leaderboardData?.totalCount ?? 0;
+  const perPage = leaderboardData?.perPage ?? 20;
+  const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
   const [participating, setParticipating] = useState(false);
 
   // Sync participation state from server response
@@ -129,7 +132,7 @@ export default function LeaderboardPage() {
         {(['all', 'monthly'] as const).map(p => (
           <button
             key={p}
-            onClick={() => setPeriod(p)}
+            onClick={() => { setPeriod(p); setPage(1); }}
             aria-pressed={period === p}
             aria-label={`Filtro ${p === 'all' ? 'Total' : 'Mensal'}`}
             className={`px-4 py-1.5 text-sm font-medium transition-colors ${
@@ -199,6 +202,45 @@ export default function LeaderboardPage() {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalCount > 0 && totalPages > 1 && (
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <p className="text-xs text-muted-foreground">
+            Página {page} de {totalPages} · até {totalCount} utilizadores
+          </p>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1 || fetching}
+            >
+              Anterior
+            </Button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+              <Button
+                key={p}
+                variant={page === p ? 'default' : 'outline'}
+                size="sm"
+                className="min-w-8"
+                onClick={() => setPage(p)}
+                disabled={fetching}
+              >
+                {p}
+              </Button>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages || fetching}
+            >
+              Seguinte
+            </Button>
+          </div>
         </div>
       )}
 

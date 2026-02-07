@@ -18,6 +18,7 @@ import {
 import { useSession } from '@/lib/auth-client';
 import { useCurrency } from '@/app/providers';
 import { usePortfolio } from '@/hooks/use-portfolio';
+import { AssetIcon } from '@/components/AssetIcon';
 import { useTrades } from '@/hooks/use-trades';
 import { toast } from 'sonner';
 import { FadeIn } from '@/components/animations';
@@ -324,9 +325,7 @@ export default function PortfolioPage() {
                 >
                   <TableCell className="pl-4 sticky left-0 bg-card group-hover:bg-muted/50 z-10 transition-colors">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-muted flex items-center justify-center text-xs font-medium">
-                        {asset.asset.slice(0, 2)}
-                      </div>
+                      <AssetIcon symbol={asset.asset} size={32} />
                       <span className="font-medium text-sm group-hover:underline">{asset.asset}</span>
                     </div>
                   </TableCell>

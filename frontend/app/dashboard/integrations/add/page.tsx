@@ -35,7 +35,7 @@ function AddIntegrationContent() {
       router.push('/sign-in');
       return;
     }
-    if (!integration) {
+    if (!integration || integration.type !== 'exchange') {
       router.push('/dashboard/integrations');
     }
   }, [session, isPending, router, integration]);

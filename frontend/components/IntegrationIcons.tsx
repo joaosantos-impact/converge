@@ -1,4 +1,12 @@
+'use client';
+
 import React from 'react';
+import dynamic from 'next/dynamic';
+
+const ExchangeIconDynamic = dynamic(
+  () => import('@web3icons/react/dynamic').then((m) => m.ExchangeIcon),
+  { ssr: false }
+);
 
 interface IconProps {
   className?: string;
@@ -421,15 +429,17 @@ export function SafeIcon({ className, size = 24 }: IconProps) {
   );
 }
 
-// Icon map
-const ICON_MAP: Record<string, React.FC<IconProps>> = {
-  binance: BinanceIcon,
-  coinbase: CoinbaseIcon,
-  kraken: KrakenIcon,
-  bybit: BybitIcon,
-  okx: OKXIcon,
-  kucoin: KuCoinIcon,
+// Web3icons has exchange icons for these; id matches ExchangeIcon id
+const WEB3_EXCHANGE_IDS = ['binance', 'bybit', 'kraken', 'okx', 'kucoin', 'coinbase'];
+
+// Fallback SVG icons for exchanges not in web3icons (e.g. MEXC)
+const FALLBACK_EXCHANGE_ICONS: Record<string, React.FC<IconProps>> = {
   mexc: MEXCIcon,
+};
+
+// Legacy icon map for non-exchange integrations (if ever needed)
+const ICON_MAP: Record<string, React.FC<IconProps>> = {
+  ...FALLBACK_EXCHANGE_ICONS,
   gateio: GateIcon,
   bitstamp: BitstampIcon,
   bitfinex: BitfinexIcon,
@@ -460,11 +470,37 @@ const ICON_MAP: Record<string, React.FC<IconProps>> = {
 };
 
 export function IntegrationIcon({ id, className, size = 24 }: { id: string } & IconProps) {
-  const Icon = ICON_MAP[id];
+  if (WEB3_EXCHANGE_IDS.includes(id)) {
+    // OKX: black by default → dark:invert for white in dark mode
+    // Bybit: light by default → invert in light (black), dark:invert-0 in dark (stays white)
+    const themeClass =
+      id === 'okx'
+        ? 'dark:invert'
+        : id === 'bybit'
+          ? 'invert dark:invert-0'
+          : '';
+    return (
+      <ExchangeIconDynamic
+        id={id}
+        size={size}
+        variant="branded"
+        className={[className, themeClass].filter(Boolean).join(' ')}
+        fallback={
+          <div
+            className="flex items-center justify-center bg-muted text-muted-foreground text-[10px] font-bold"
+            style={{ width: size, height: size }}
+          >
+            {id.slice(0, 2).toUpperCase()}
+          </div>
+        }
+      />
+    );
+  }
+  const Icon = FALLBACK_EXCHANGE_ICONS[id] ?? ICON_MAP[id];
   if (Icon) return <Icon className={className} size={size} />;
   return null;
 }
 
 export function hasIcon(id: string): boolean {
-  return id in ICON_MAP;
+  return WEB3_EXCHANGE_IDS.includes(id) || id in FALLBACK_EXCHANGE_ICONS || id in ICON_MAP;
 }

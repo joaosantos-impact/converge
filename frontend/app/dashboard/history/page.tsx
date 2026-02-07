@@ -15,6 +15,7 @@ import {
 import { useSession } from '@/lib/auth-client';
 import { useCurrency } from '@/app/providers';
 import { useTrades } from '@/hooks/use-trades';
+import { AssetIcon } from '@/components/AssetIcon';
 import { toast } from 'sonner';
 import { FadeIn } from '@/components/animations';
 import { PerformanceChart } from '@/components/PerformanceChart';
@@ -316,6 +317,7 @@ export default function HistoryPage() {
                       <div className={`w-0.5 h-10 shrink-0 ${trade.side === 'buy' ? 'bg-foreground' : 'bg-red-500'}`} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
+                          <AssetIcon symbol={trade.symbol.split('/')[0] || trade.symbol} size={20} />
                           <span className="font-medium text-xs">{trade.symbol}</span>
                           <span className={`text-[9px] px-1.5 py-0.5 ${trade.side === 'buy' ? 'bg-muted text-foreground' : 'bg-red-500/10 text-red-500'}`}>
                             {trade.side === 'buy' ? 'COMPRA' : 'VENDA'}
