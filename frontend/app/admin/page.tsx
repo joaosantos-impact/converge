@@ -98,11 +98,13 @@ export default function AdminPage() {
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'post' | 'review'; id: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     if (isPending) return;
     if (!session) { router.push('/sign-in'); return; }
     Promise.all([fetchStats(), fetchPosts(), fetchReviews()]).finally(() => setLoading(false));
   }, [session, isPending]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const fetchStats = async () => {
     try {

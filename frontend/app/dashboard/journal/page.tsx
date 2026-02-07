@@ -41,7 +41,7 @@ export default function JournalPage() {
 
   // Use React Query for trades (shared cache across pages)
   const { data: tradesData, isLoading: tradesLoading, error: tradesError } = useTrades(90);
-  const trades = tradesData?.trades || [];
+  const trades = useMemo(() => tradesData?.trades || [], [tradesData]);
   const loading = tradesLoading;
 
   // New entry form

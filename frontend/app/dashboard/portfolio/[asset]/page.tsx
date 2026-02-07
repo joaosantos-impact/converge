@@ -9,8 +9,8 @@ import { useCurrency } from '@/app/providers';
 import { usePortfolio } from '@/hooks/use-portfolio';
 import { useTrades } from '@/hooks/use-trades';
 import { useLivePrices } from '@/lib/price-service';
-import type { PortfolioSummary, TradeData } from '@/lib/types';
-import { toast } from 'sonner';
+import type { TradeData } from '@/lib/types';
+
 import { PremiumChart } from '@/components/PremiumChart';
 
 interface ExchangeBreakdown {
@@ -97,10 +97,12 @@ export default function AssetDetailPage() {
   }, [session, isPending, router]);
 
   // Fetch price history when asset or time range changes
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     if (!asset || isPending || !session) return;
     fetchPriceHistory();
   }, [asset, timeRange, session, isPending]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const fetchPriceHistory = async () => {
     setChartLoading(true);

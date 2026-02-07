@@ -20,31 +20,8 @@ import {
   Drawer, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle,
 } from '@/components/ui/drawer';
 import { toast } from 'sonner';
-import type { TradeData } from '@/lib/types';
+
 import { FadeIn } from '@/components/animations';
-
-interface PostTrade {
-  id: string;
-  symbol: string;
-  side: string;
-  price: number | null;
-  amount: number | null;
-  cost: number | null;
-  exchange: string | null;
-  timestamp: string;
-}
-
-interface Post {
-  id: string;
-  user: { id: string; name: string; image: string | null } | null;
-  content: string;
-  isOwner: boolean;
-  trades: PostTrade[];
-  likes: number;
-  comments: number;
-  isLiked: boolean;
-  createdAt: string;
-}
 
 export default function FeedPage() {
   const { data: session, isPending } = useSession();
@@ -67,7 +44,7 @@ export default function FeedPage() {
   // React Query for feed and trades
   const { data: feedData, isLoading: loading, error: feedError } = useFeed();
   const invalidateFeed = useInvalidateFeed();
-  const posts = feedData?.posts || [];
+  const posts = useMemo(() => feedData?.posts || [], [feedData]);
 
   const { data: userTradesData, isLoading: loadingTrades } = useTrades(30);
   const userTrades = userTradesData?.trades || [];

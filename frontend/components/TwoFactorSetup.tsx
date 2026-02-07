@@ -185,6 +185,7 @@ export function TwoFactorSetup({ isEnabled, onStatusChange }: TwoFactorSetupProp
           <div className="space-y-6 py-4">
             {totpUri && (
               <div className="flex justify-center p-4 bg-white">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(totpUri)}`}
                   alt="QR Code"

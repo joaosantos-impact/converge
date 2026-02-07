@@ -76,7 +76,7 @@ class BinancePriceService {
             });
             this.notify();
           }
-        } catch (error) {
+        } catch {
           // Ignore parse errors
         }
       };

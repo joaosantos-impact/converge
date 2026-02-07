@@ -207,7 +207,7 @@ export default function TaxesPage() {
   const { data: tradesResponse, isLoading: tradesLoading } = useTrades(0, undefined, 10000, { page: 1 });
   const { data: portfolioData, isLoading: portfolioLoading } = usePortfolio({ perPage: 200 });
   const loading = tradesLoading || portfolioLoading;
-  const allTrades = tradesResponse?.trades || [];
+  const allTrades = useMemo(() => tradesResponse?.trades || [], [tradesResponse]);
 
   useEffect(() => {
     if (isPending) return;
@@ -231,7 +231,7 @@ export default function TaxesPage() {
     totalBuyVolumeInYear, totalSellVolumeInYear, totalFeesInYear,
     buyCountInYear, sellCountInYear, potentialTax,
     totalValue, totalInvested, totalUnrealizedPnL,
-    taxFreeHoldings, taxableHoldings, totalTaxFreeValue, totalTaxableValue,
+    totalTaxFreeValue, totalTaxableValue,
   } = useMemo(() => {
     const year = parseInt(selectedYear);
     const yearStart = new Date(year, 0, 1);
@@ -323,7 +323,7 @@ export default function TaxesPage() {
       totalBuyVolumeInYear, totalSellVolumeInYear, totalFeesInYear,
       buyCountInYear: buysInYear.length, sellCountInYear: sellsInYear.length,
       potentialTax, totalValue, totalInvested, totalUnrealizedPnL,
-      taxFreeHoldings, taxableHoldings, totalTaxFreeValue, totalTaxableValue,
+      totalTaxFreeValue, totalTaxableValue,
     };
   }, [allTrades, selectedYear, portfolioData]);
 

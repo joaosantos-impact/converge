@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@/lib/auth-client';
-import { useCurrency } from '@/app/providers';
 import { useInvalidateExchangeAccounts } from '@/hooks/use-exchange-accounts';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
@@ -58,7 +57,6 @@ const EXCHANGES = [
 
 export default function ExchangesPage() {
   const { data: session, isPending } = useSession();
-  const { formatValue } = useCurrency();
   const router = useRouter();
   const { data: accounts = [], isLoading: loading, error } = useQuery<ExchangeAccount[]>({
     queryKey: ['exchange-accounts'],
@@ -120,7 +118,7 @@ export default function ExchangesPage() {
         const data = await response.json();
         toast.error(data.error || 'Erro ao adicionar');
       }
-    } catch (error) {
+    } catch {
       toast.error('Erro ao adicionar');
     } finally {
       setCreating(false);
@@ -139,7 +137,7 @@ export default function ExchangesPage() {
         toast.success('Exchange removida');
         invalidateAccounts();
       }
-    } catch (error) {
+    } catch {
       toast.error('Erro ao remover');
     } finally {
       setDeleteDialogOpen(false);
@@ -155,7 +153,7 @@ export default function ExchangesPage() {
         toast.success('Sincronização completa');
         invalidateAccounts();
       }
-    } catch (error) {
+    } catch {
       toast.error('Erro na sincronização');
     } finally {
       setSyncing(null);

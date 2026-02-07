@@ -124,7 +124,7 @@ export default function SettingsPage() {
         const data = await response.json();
         toast.error(data.error || 'Erro ao alterar password');
       }
-    } catch (error) {
+    } catch {
       toast.error('Erro ao alterar password');
     } finally {
       setChangingPassword(false);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -22,9 +22,8 @@ import { PerformanceChart } from '@/components/PerformanceChart';
 const PER_PAGE = 20;
 
 export default function HistoryPage() {
-  const { data: session, isPending } = useSession();
+  const { isPending } = useSession();
   const { formatValue } = useCurrency();
-  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'buy' | 'sell'>('all');
@@ -61,7 +60,7 @@ export default function HistoryPage() {
     page: 1,
   });
 
-  const trades = tradesData?.trades || [];
+  const trades = useMemo(() => tradesData?.trades || [], [tradesData]);
   const totalPages = tradesData?.totalPages || 1;
   const totalTrades = tradesData?.total || 0;
   const exchanges = tradesData?.exchanges || [];

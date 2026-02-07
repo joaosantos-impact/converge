@@ -49,14 +49,6 @@ export const PremiumChart = memo(function PremiumChart({
     }));
   }, [data, timeRange]);
 
-  const percentChange = useMemo(() => {
-    if (chartData.length < 2) return 0;
-    const first = chartData[0].value;
-    const last = chartData[chartData.length - 1].value;
-    if (first === 0) return 0;
-    return ((last - first) / first) * 100;
-  }, [chartData]);
-
   // Single chart line color: yellow/gold. Green/red reserved for buy/sell markers only.
   const strokeColor = '#ca8a04'; // amber-600 / dourado
   const gradientColor = strokeColor;

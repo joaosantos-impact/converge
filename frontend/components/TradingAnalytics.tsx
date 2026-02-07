@@ -33,9 +33,11 @@ export function TradingAnalytics() {
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(30);
 
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     fetchTrades();
   }, [days]);
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   const fetchTrades = async () => {
     try {

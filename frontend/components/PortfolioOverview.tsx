@@ -6,13 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
-  RefreshCw, 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  RefreshCw,
+  TrendingUp,
+  TrendingDown,
   Wallet,
-  ArrowUpRight,
-  ArrowDownRight,
   Layers
 } from 'lucide-react';
 import type { PortfolioSummary } from '@/lib/types';
@@ -56,7 +54,7 @@ export function PortfolioOverview() {
       } else {
         toast.error(data.message || 'Erro na sincronização');
       }
-    } catch (error) {
+    } catch {
       toast.error('Erro na sincronização com as exchanges');
     } finally {
       setSyncing(false);

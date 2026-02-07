@@ -34,7 +34,7 @@ import {
 const PER_PAGE = 20;
 
 export default function PortfolioPage() {
-  const { data: session, isPending } = useSession();
+  const { isPending } = useSession();
   const { formatValue } = useCurrency();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -59,7 +59,7 @@ export default function PortfolioPage() {
     search: debouncedSearch || undefined,
   });
   const { data: tradesData, isLoading: tradesLoading } = useTrades(90);
-  const recentTrades = tradesData?.trades || [];
+  const recentTrades = useMemo(() => tradesData?.trades || [], [tradesData]);
   const loading = portfolioLoading || tradesLoading;
 
   const [sharing, setSharing] = useState(false);
@@ -131,11 +131,6 @@ export default function PortfolioPage() {
     }));
     return { buys, sells };
   }, [recentTrades]);
-
-  const change24h = portfolio?.change24h || 0;
-  const changePercent = portfolio?.totalValue && portfolio.totalValue > 0
-    ? (change24h / portfolio.totalValue) * 100
-    : 0;
 
   if (isPending || loading) {
     return (

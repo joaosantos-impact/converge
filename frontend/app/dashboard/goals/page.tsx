@@ -50,7 +50,6 @@ export default function GoalsPage() {
   const currencyLabel = currency === 'EUR' ? 'EUR' : currency === 'BTC' ? 'BTC' : 'USD';
   const currencySymbol = currency === 'EUR' ? '€' : currency === 'BTC' ? '₿' : '$';
 
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (isPending) return;
     if (!session) { router.push('/sign-in'); return; }
@@ -60,7 +59,6 @@ export default function GoalsPage() {
     } catch { /* empty */ }
     setLoading(false);
   }, [session, isPending, router]);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const saveGoals = (updatedGoals: Goal[]) => {
     setGoals(updatedGoals);
@@ -101,7 +99,7 @@ export default function GoalsPage() {
   };
 
   // Update current values
-  /* eslint-disable react-hooks/set-state-in-effect */
+  /* eslint-disable react-hooks/exhaustive-deps */
   useEffect(() => {
     if (portfolioValue > 0 && goals.length > 0) {
       const updated = goals.map(g => ({ ...g, currentValue: portfolioValue }));
@@ -109,7 +107,7 @@ export default function GoalsPage() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     }
   }, [portfolioValue]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  /* eslint-enable react-hooks/exhaustive-deps */
 
   if (isPending || loading) {
     return (

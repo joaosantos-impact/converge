@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSession } from '@/lib/auth-client';
 
 interface ReviewData {
@@ -313,59 +313,6 @@ function GlowLine() {
   return (
     <div className="relative h-px w-full">
       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
-    </div>
-  );
-}
-
-/* ──────────────────────  FEATURE CARD  ──────────────────── */
-
-function FeatureCard({ icon, title, desc, delay = 0 }: { icon: React.ReactNode; title: string; desc: string; delay?: number }) {
-  const { ref, visible } = useScrollReveal();
-  return (
-    <div
-      ref={ref}
-      className="group relative p-6 border border-white/[0.08] bg-white/[0.02] backdrop-blur-sm hover:bg-white/[0.04] hover:border-white/[0.15] transition-all duration-500"
-      style={{
-        opacity: visible ? 1 : 0,
-        transform: visible ? 'translateY(0)' : 'translateY(24px)',
-        transition: `opacity 0.7s ease ${delay}s, transform 0.7s ease ${delay}s, background-color 0.5s, border-color 0.5s`,
-      }}
-    >
-      <div className="absolute top-0 left-0 w-4 h-4 border-t border-l border-white/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-      <div className="absolute bottom-0 right-0 w-4 h-4 border-b border-r border-white/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-      <div className="w-10 h-10 flex items-center justify-center border border-white/10 bg-white/[0.03] text-white/70 group-hover:text-white transition-colors mb-5" aria-hidden="true">
-        {icon}
-      </div>
-      <h3 className="text-sm font-medium text-white">{title}</h3>
-      <p className="text-[13px] text-white/55 mt-2 leading-relaxed">{desc}</p>
-    </div>
-  );
-}
-
-/* ──────────────────────  STEP CARD  ───────────────────────── */
-
-function StepCard({ num, title, desc, delay = 0 }: { num: string; title: string; desc: string; delay?: number }) {
-  const { ref, visible } = useScrollReveal();
-  return (
-    <div
-      ref={ref}
-      className="relative p-8 border border-white/[0.06] bg-white/[0.015]"
-      style={{
-        opacity: visible ? 1 : 0,
-        transform: visible ? 'translateY(0) scale(1)' : 'translateY(30px) scale(0.97)',
-        transition: `opacity 0.7s ease ${delay}s, transform 0.7s ease ${delay}s`,
-      }}
-    >
-      <span className="text-[80px] leading-none font-serif-display italic text-white/[0.04] absolute top-4 right-6 select-none" aria-hidden="true">
-        {num}
-      </span>
-      <div className="relative">
-        <div className="w-8 h-8 flex items-center justify-center border border-white/20 text-xs font-medium text-white/60 mb-5">
-          {num}
-        </div>
-        <h3 className="font-medium text-white">{title}</h3>
-        <p className="text-sm text-white/55 mt-2 leading-relaxed">{desc}</p>
-      </div>
     </div>
   );
 }

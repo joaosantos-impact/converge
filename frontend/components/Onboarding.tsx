@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -34,7 +33,6 @@ const POPULAR_WALLETS = INTEGRATIONS.filter(i =>
 );
 
 export function Onboarding({ userName, onComplete }: OnboardingProps) {
-  const router = useRouter();
   const [step, setStep] = useState<Step>('welcome');
   const [currency, setCurrency] = useState('EUR');
   const [country, setCountry] = useState('PT');

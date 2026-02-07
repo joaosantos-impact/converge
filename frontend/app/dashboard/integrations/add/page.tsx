@@ -89,7 +89,7 @@ function AddIntegrationContent() {
         const data = await response.json();
         toast.error(data.error || 'Erro ao adicionar');
       }
-    } catch (error) {
+    } catch {
       toast.error('Erro ao adicionar');
     } finally {
       setCreating(false);

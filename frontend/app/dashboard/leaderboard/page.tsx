@@ -7,27 +7,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useSession } from '@/lib/auth-client';
-import { useCurrency } from '@/app/providers';
 import { useLeaderboard, useInvalidateLeaderboard } from '@/hooks/use-leaderboard';
 import { toast } from 'sonner';
 import { FadeIn } from '@/components/animations';
 
-interface RankingUser {
-  rank: number;
-  userId: string;
-  displayName: string;
-  image?: string;
-  pnlPercent: number;
-  totalTrades: number;
-  winRate: number;
-  followers: number;
-  isFollowing: boolean;
-  isCurrentUser: boolean;
-}
-
 export default function LeaderboardPage() {
   const { data: session, isPending } = useSession();
-  const { formatValue } = useCurrency();
   const router = useRouter();
   const [period, setPeriod] = useState<'all' | 'monthly'>('all');
   const [togglingParticipation, setTogglingParticipation] = useState(false);
@@ -95,7 +80,7 @@ export default function LeaderboardPage() {
         const errData = await response.json().catch(() => ({}));
         toast.error(errData.error || 'Erro ao alterar participação');
       }
-    } catch (err) {
+    } catch {
       setParticipating(prev);
       toast.error('Erro de rede ao alterar participação');
     } finally {

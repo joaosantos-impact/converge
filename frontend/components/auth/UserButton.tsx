@@ -13,7 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
-import { LogOut, User } from "lucide-react";
+import { LogOut } from "lucide-react";
 
 export function UserButton() {
   const router = useRouter();

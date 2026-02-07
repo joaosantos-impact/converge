@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -96,7 +96,7 @@ export function ExchangeAccounts() {
       } else {
         toast.error(data.error || 'Erro ao adicionar conta de exchange');
       }
-    } catch (error) {
+    } catch {
       toast.error('Erro ao adicionar conta de exchange');
     } finally {
       setSubmitting(false);
@@ -115,12 +115,11 @@ export function ExchangeAccounts() {
       } else {
         toast.error('Erro ao remover conta');
       }
-    } catch (error) {
+    } catch {
       toast.error('Erro ao remover conta');
     }
   };
 
-  const selectedExchange = EXCHANGES.find(e => e.id === formData.exchange);
   const requiresPassphrase = formData.exchange === 'okx';
 
   if (loading) {

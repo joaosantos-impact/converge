@@ -14,7 +14,7 @@ import {
   useExchangeAccountDetails,
   type ExchangeAccount,
 } from '@/hooks/use-exchange-accounts';
-import { INTEGRATIONS, getIntegrationById, type IntegrationType, type Integration } from '@/lib/integrations';
+import { INTEGRATIONS, type IntegrationType, type Integration } from '@/lib/integrations';
 import { IntegrationIcon, hasIcon } from '@/components/IntegrationIcons';
 import { FadeIn } from '@/components/animations';
 import { toast } from 'sonner';
@@ -368,7 +368,7 @@ export default function IntegrationsPage() {
   const [selectedAccount, setSelectedAccount] = useState<ExchangeAccount | null>(null);
   const [dialogMode, setDialogMode] = useState<'add' | 'details' | null>(null);
 
-  const { data: accountsData = [], isLoading: loadingConnected, error: accountsError } = useExchangeAccounts();
+  const { data: accountsData = [], error: accountsError } = useExchangeAccounts();
   const invalidateAccounts = useInvalidateExchangeAccounts();
 
   // Map of exchange id → connected accounts
