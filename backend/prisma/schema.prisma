@@ -1,0 +1,388 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// Better Auth Models
+// ==========================================
+
+model User {
+  id            String    @id
+  name          String
+  email         String    @unique
+  emailVerified Boolean   @default(false)
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions      Session[]
+  accounts      Account[]
+  twoFactor     TwoFactor[]
+  
+  // App-specific relations
+  exchangeAccounts  ExchangeAccount[]
+  posts             Post[]
+  postLikes         PostLike[]
+  postComments      PostComment[]
+  followers         Follow[]  @relation("UserFollowing")
+  following         Follow[]  @relation("UserFollowers")
+  portfolioSnapshots PortfolioSnapshot[]
+  syncLogs          SyncLog[]
+  blogPosts         BlogPost[]
+  profile           UserProfile?
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@index([userId, providerId])
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@index([expiresAt])
+}
+
+// Two-factor authentication data (Better Auth plugin)
+model TwoFactor {
+  id          String   @id @default(cuid())
+  secret      String
+  backupCodes String
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("twoFactor")
+}
+
+// ==========================================
+// Application Models
+// ==========================================
+
+// Exchange account configuration
+model ExchangeAccount {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  exchange      String
+  apiKey        String
+  apiSecret     String
+  apiPassphrase String?
+  isActive      Boolean  @default(true)
+  lastSyncAt    DateTime?
+  lastSyncTradeCount Int @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  balances    Balance[]
+  trades      Trade[]
+  alerts      PriceAlert[]
+
+  @@index([userId])
+  @@index([userId, isActive])
+  @@index([exchange])
+}
+
+// Portfolio balances — ONE row per asset per exchange account (upserted on sync)
+model Balance {
+  id                String          @id @default(cuid())
+  exchangeAccountId String
+  exchangeAccount   ExchangeAccount @relation(fields: [exchangeAccountId], references: [id], onDelete: Cascade)
+
+  asset             String
+  free              Float
+  locked            Float
+  total             Float
+  usdValue          Float
+
+  updatedAt         DateTime        @updatedAt
+
+  @@unique([exchangeAccountId, asset])
+  @@index([exchangeAccountId])
+}
+
+// Trade history
+model Trade {
+  id                String          @id @default(cuid())
+  exchangeAccountId String
+  exchangeAccount   ExchangeAccount @relation(fields: [exchangeAccountId], references: [id], onDelete: Cascade)
+
+  exchangeTradeId   String
+  symbol            String
+  side              String
+  type              String
+  price             Float
+  amount            Float
+  cost              Float
+  fee               Float
+  feeCurrency       String
+
+  timestamp         DateTime
+  createdAt         DateTime        @default(now())
+
+  @@unique([exchangeAccountId, exchangeTradeId])
+  @@index([exchangeAccountId, symbol])
+  @@index([exchangeAccountId, timestamp])
+  @@index([timestamp])
+  @@index([symbol, timestamp])
+}
+
+// Price alerts
+model PriceAlert {
+  id                String          @id @default(cuid())
+  exchangeAccountId String
+  exchangeAccount   ExchangeAccount @relation(fields: [exchangeAccountId], references: [id], onDelete: Cascade)
+
+  symbol            String
+  condition         String
+  targetPrice       Float
+
+  isActive          Boolean         @default(true)
+  isTriggered       Boolean         @default(false)
+  triggeredAt       DateTime?
+
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  @@index([exchangeAccountId])
+  @@index([symbol])
+  @@index([isActive, isTriggered])
+}
+
+// Portfolio snapshots (daily aggregation)
+model PortfolioSnapshot {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  totalUsdValue   Float
+  totalPnl        Float
+  totalPnlPercent Float
+
+  timestamp       DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, timestamp])
+  @@index([timestamp])
+}
+
+// ==========================================
+// Sync rate-limiting
+// ==========================================
+
+model SyncLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startedAt DateTime @default(now())
+  finishedAt DateTime?
+  status    String   @default("running")
+  synced    Int      @default(0)
+  failed    Int      @default(0)
+
+  @@index([userId, startedAt])
+  @@index([status])
+}
+
+// ==========================================
+// Feed/Social Models
+// ==========================================
+
+model Post {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  content   String
+  
+  showPrice       Boolean @default(true)
+  showAmount      Boolean @default(true)
+  showExchange    Boolean @default(true)
+  showPnl         Boolean @default(false)
+  
+  isPublic  Boolean  @default(true)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  trades    PostTrade[]
+  likes     PostLike[]
+  comments  PostComment[]
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([isPublic])
+}
+
+model PostTrade {
+  id       String @id @default(cuid())
+  postId   String
+  post     Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tradeId  String
+  
+  symbol      String
+  side        String
+  price       Float
+  amount      Float
+  cost        Float
+  exchange    String
+  timestamp   DateTime
+  
+  @@index([postId])
+  @@index([tradeId])
+}
+
+model PostLike {
+  id        String   @id @default(cuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([postId, userId])
+  @@index([postId])
+  @@index([userId])
+}
+
+model PostComment {
+  id        String   @id @default(cuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([postId])
+  @@index([postId, createdAt])
+  @@index([userId])
+}
+
+// ==========================================
+// Social/Profile Models
+// ==========================================
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  follower    User     @relation("UserFollowers", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId String
+  following   User     @relation("UserFollowing", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId])
+  @@index([followerId])
+  @@index([followingId])
+}
+
+// ==========================================
+// Blog Models
+// ==========================================
+
+model BlogPost {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  title       String
+  excerpt     String?
+  content     String
+  coverImage  String?
+  published   Boolean  @default(false)
+  authorId    String
+  author      User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  tags        String[]
+  views       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([published, createdAt])
+  @@index([slug])
+  @@index([authorId])
+}
+
+// Landing page reviews (managed by admin)
+model Review {
+  id          String   @id @default(cuid())
+  name        String
+  role        String
+  initials    String
+  text        String
+  rating      Int      @default(5)
+  published   Boolean  @default(true)
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([published, order])
+}
+
+// Public user profile settings
+model UserProfile {
+  id           String  @id @default(cuid())
+  userId       String  @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  displayName  String?
+  bio          String?
+  
+  isPublic     Boolean @default(false)
+  showBalance  Boolean @default(false)
+  showPerformance Boolean @default(true)
+  
+  shareToken   String?  @unique
+  
+  totalPnlPercent Float @default(0)
+  monthlyPnlPercent Float @default(0)
+  totalTrades Int @default(0)
+  winRate Float @default(0)
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([isPublic])
+  @@index([totalPnlPercent])
+  @@index([monthlyPnlPercent])
+}
