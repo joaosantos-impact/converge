@@ -50,7 +50,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const res = await fetch(`${apiUrl}/api/blog`);
     if (res.ok) {
       const posts: Array<{ slug: string; updatedAt?: string; createdAt?: string }> = await res.json();
-      blogPages = posts.map((post) => ({
+      blogPages = posts.map((post: { slug: string; updatedAt?: string; createdAt?: string }) => ({
         url: `${baseUrl}/blog/${post.slug}`,
         lastModified: post.updatedAt || post.createdAt,
         changeFrequency: 'monthly' as const,

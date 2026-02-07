@@ -112,7 +112,7 @@ export default function GoalsPage() {
       setGoals(updated);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- goals read only to sync currentValue when portfolioValue changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- goals read only when portfolioValue changes
   }, [portfolioValue]);
 
   if (isPending || loading) {

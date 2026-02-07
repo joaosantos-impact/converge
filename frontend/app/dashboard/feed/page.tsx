@@ -44,6 +44,7 @@ export default function FeedPage() {
   // React Query for feed and trades
   const { data: feedData, isLoading: loading, error: feedError } = useFeed();
   const invalidateFeed = useInvalidateFeed();
+  const posts = useMemo(() => feedData?.posts ?? [], [feedData]);
 
   const { data: userTradesData, isLoading: loadingTrades } = useTrades(30);
   const userTrades = userTradesData?.trades ?? [];
@@ -123,14 +124,13 @@ export default function FeedPage() {
   };
 
   const allFilteredPosts = useMemo(() => {
-    const list = feedData?.posts ?? [];
-    return list.filter((post: { trades?: Array<{ side: string }> }) => {
+    return posts.filter((post: { trades?: Array<{ side: string }> }) => {
       if (filter === 'all') return true;
       if (filter === 'buys') return post.trades?.some(t => t.side === 'buy') ?? false;
       if (filter === 'sells') return post.trades?.some(t => t.side === 'sell') ?? false;
       return true;
     });
-  }, [feedData, filter]);
+  }, [posts, filter]);
 
   const filteredPosts = useMemo(() => allFilteredPosts.slice(0, visiblePostCount), [allFilteredPosts, visiblePostCount]);
   const hasMorePosts = allFilteredPosts.length > visiblePostCount;

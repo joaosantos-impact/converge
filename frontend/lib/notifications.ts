@@ -77,7 +77,7 @@ class NotificationService {
     // Try to use service worker for better mobile support
     if (this.swRegistration) {
       try {
-        // @ts-expect-error - showNotification options differ across browsers
+        // @ts-expect-error showNotification options differ across browsers
         await this.swRegistration.showNotification(options.title, {
           body: options.body,
           icon: notificationOptions.icon,
