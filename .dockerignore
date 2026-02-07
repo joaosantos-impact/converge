@@ -1,0 +1,25 @@
+# Dependencies and build artifacts
+node_modules
+**/node_modules
+.next
+**/.next
+dist
+**/dist
+
+# Git and IDE
+.git
+.gitignore
+.cursor
+.claude
+*.md
+
+# Env and secrets
+.env
+.env.*
+!.env.example
+
+# Misc
+*.log
+.DS_Store
+coverage
+.nyc_output
