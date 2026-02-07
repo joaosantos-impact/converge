@@ -26,8 +26,10 @@ const CURATED_SOURCES = [
 export default function NewsPage() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const loading = isPending;
+  const [notificationsEnabled, setNotificationsEnabled] = useState(
+    () => typeof window !== 'undefined' && localStorage.getItem('news-notifications') === 'true',
+  );
 
   useEffect(() => {
     if (isPending) return;
@@ -35,11 +37,6 @@ export default function NewsPage() {
       router.push('/sign-in');
       return;
     }
-    // Check saved notification preference
-    const saved = localStorage.getItem('news-notifications');
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (saved === 'true') setNotificationsEnabled(true);
-    setLoading(false);
   }, [session, isPending, router]);
 
   const toggleNotifications = async (checked: boolean) => {

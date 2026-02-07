@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import {
   Select,
@@ -20,6 +20,41 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+
+/** Declared outside render for react-hooks/static-components */
+function CompareChartTooltip({
+  active,
+  payload,
+  labelA,
+  labelB,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: { date: string; a: number; b: number }; value: number }>;
+  labelA: string;
+  labelB: string;
+}) {
+  if (active && payload && payload.length) {
+    const d = payload[0].payload!;
+    return (
+      <div className="bg-card border border-border px-4 py-3 shadow-xl">
+        <p className="text-xs text-muted-foreground mb-1.5">{d.date}</p>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 bg-foreground" />
+            <span className="text-sm font-semibold font-display">{d.a >= 0 ? '+' : ''}{d.a.toFixed(1)}%</span>
+            <span className="text-[10px] text-muted-foreground">{labelA}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 bg-foreground/40" />
+            <span className="text-sm font-semibold font-display">{d.b >= 0 ? '+' : ''}{d.b.toFixed(1)}%</span>
+            <span className="text-[10px] text-muted-foreground">{labelB}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  return null;
+}
 
 const ASSETS = [
   { id: 'BTC', name: 'Bitcoin' },
@@ -78,30 +113,6 @@ function ComparisonChart({
   const gradientIdA = 'cmp-grad-a';
   const gradientIdB = 'cmp-grad-b';
 
-  const renderTooltip = useCallback(({ active, payload }: { active?: boolean; payload?: Array<{ payload?: { date: string; a: number; b: number }; value: number }> }) => {
-    if (active && payload && payload.length) {
-      const d = payload[0].payload!;
-      return (
-        <div className="bg-card border border-border px-4 py-3 shadow-xl">
-          <p className="text-xs text-muted-foreground mb-1.5">{d.date}</p>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 bg-foreground" />
-              <span className="text-sm font-semibold font-display">{d.a >= 0 ? '+' : ''}{d.a.toFixed(1)}%</span>
-              <span className="text-[10px] text-muted-foreground">{labelA}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2 h-2 bg-foreground/40" />
-              <span className="text-sm font-semibold font-display">{d.b >= 0 ? '+' : ''}{d.b.toFixed(1)}%</span>
-              <span className="text-[10px] text-muted-foreground">{labelB}</span>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    return null;
-  }, [labelA, labelB]);
-
   if (merged.length === 0) {
     return (
       <div className="h-[280px] flex items-center justify-center text-muted-foreground text-sm">
@@ -140,7 +151,7 @@ function ComparisonChart({
           width={60}
           dx={-4}
         />
-        <Tooltip content={renderTooltip} cursor={{ stroke: 'hsl(var(--foreground))', strokeWidth: 1, strokeDasharray: '4 4', opacity: 0.3 }} />
+        <Tooltip content={<CompareChartTooltip labelA={labelA} labelB={labelB} />} cursor={{ stroke: 'hsl(var(--foreground))', strokeWidth: 1, strokeDasharray: '4 4', opacity: 0.3 }} />
         <Area
           type="monotone"
           dataKey="a"

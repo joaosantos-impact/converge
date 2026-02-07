@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useId, memo, useCallback } from 'react';
+import { useMemo, useId, memo } from 'react';
 import {
   AreaChart,
   Area,
@@ -23,6 +23,38 @@ interface PremiumChartProps {
   }>;
   showAxes?: boolean;
   timeRange?: string;
+}
+
+/** Declared outside render so Recharts does not see a new component each time (react-hooks/static-components) */
+function PremiumChartTooltipContent({
+  active,
+  payload,
+  formatValue,
+  timeRange = '30d',
+}: {
+  active?: boolean;
+  payload?: Array<{ payload?: Record<string, unknown>; value?: number }>;
+  formatValue?: (v: number) => string;
+  timeRange?: string;
+}) {
+  if (active && payload && payload.length) {
+    const d = payload[0].payload;
+    if (!d) return null;
+    const val = Number(d.value || 0);
+    const time = String(d.time || '');
+    const date = String(d.date || '');
+    return (
+      <div className="bg-card border border-border px-4 py-3 shadow-xl">
+        <p className="text-base font-semibold font-display">
+          {formatValue ? formatValue(val) : val.toLocaleString()}
+        </p>
+        <p className="text-xs text-muted-foreground mt-0.5">
+          {timeRange === '24h' ? time : `${date} · ${time}`}
+        </p>
+      </div>
+    );
+  }
+  return null;
 }
 
 export const PremiumChart = memo(function PremiumChart({
@@ -49,13 +81,11 @@ export const PremiumChart = memo(function PremiumChart({
     }));
   }, [data, timeRange]);
 
-  // Single chart line color: yellow/gold. Green/red reserved for buy/sell markers only.
-  const strokeColor = '#ca8a04'; // amber-600 / dourado
+  const strokeColor = '#ca8a04';
   const gradientColor = strokeColor;
   const reactId = useId();
   const gradientId = `premium-gradient-${reactId.replace(/:/g, '')}`;
 
-  // Default Y-axis formatter
   const defaultYFormatter = (value: number) => {
     if (Math.abs(value) >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
     if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(0)}k`;
@@ -64,27 +94,6 @@ export const PremiumChart = memo(function PremiumChart({
   };
 
   const yAxisFormatter = formatValue || defaultYFormatter;
-
-  const renderTooltip = useCallback(({ active, payload }: { active?: boolean; payload?: Array<{ payload?: Record<string, unknown>; value?: number }> }) => {
-    if (active && payload && payload.length) {
-      const d = payload[0].payload;
-      if (!d) return null;
-      const val = Number(d.value || 0);
-      const time = String(d.time || '');
-      const date = String(d.date || '');
-      return (
-        <div className="bg-card border border-border px-4 py-3 shadow-xl">
-          <p className="text-base font-semibold font-display">
-            {formatValue ? formatValue(val) : val.toLocaleString()}
-          </p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {timeRange === '24h' ? time : `${date} · ${time}`}
-          </p>
-        </div>
-      );
-    }
-    return null;
-  }, [formatValue, timeRange]);
 
   if (chartData.length === 0) {
     return (
@@ -125,7 +134,7 @@ export const PremiumChart = memo(function PremiumChart({
             dx={-4}
           />
         )}
-        <Tooltip content={renderTooltip} cursor={{ stroke: strokeColor, strokeWidth: 1, strokeDasharray: '4 4', opacity: 0.4 }} />
+        <Tooltip content={<PremiumChartTooltipContent formatValue={formatValue} timeRange={timeRange} />} cursor={{ stroke: strokeColor, strokeWidth: 1, strokeDasharray: '4 4', opacity: 0.4 }} />
         <Area
           type="monotone"
           dataKey="value"

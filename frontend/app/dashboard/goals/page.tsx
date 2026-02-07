@@ -50,6 +50,13 @@ export default function GoalsPage() {
   const currencyLabel = currency === 'EUR' ? 'EUR' : currency === 'BTC' ? 'BTC' : 'USD';
   const currencySymbol = currency === 'EUR' ? '€' : currency === 'BTC' ? '₿' : '$';
 
+  // Avoid Date.now() during render (purity) — update once per minute
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
+
   useEffect(() => {
     if (isPending) return;
     if (!session) { router.push('/sign-in'); return; }
@@ -165,9 +172,8 @@ export default function GoalsPage() {
               const progress = goal.targetValue > 0 ? Math.min((goal.currentValue / goal.targetValue) * 100, 100) : 0;
               const remaining = Math.max(goal.targetValue - goal.currentValue, 0);
               const isCompleted = goal.currentValue >= goal.targetValue;
-              const nowMs = new Date().getTime();
               const daysLeft = goal.deadline
-                ? Math.ceil((new Date(goal.deadline).getTime() - nowMs) / (1000 * 60 * 60 * 24))
+                ? Math.ceil((new Date(goal.deadline).getTime() - now) / (1000 * 60 * 60 * 24))
                 : null;
 
               return (
