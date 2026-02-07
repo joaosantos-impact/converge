@@ -7,12 +7,12 @@
     "backend"
   ],
   "scripts": {
-    "dev": "concurrently -k -n web,api -c cyan,green \"cd frontend && bun run dev\" \"cd backend && bun run start:dev\"",
-    "build": "cd frontend && bun run build && cd ../backend && bun run build",
-    "build:web": "cd frontend && bun run build",
-    "build:api": "cd backend && bun run build",
-    "start": "concurrently -k -n web,api -c cyan,green \"cd frontend && bun run start\" \"cd backend && bun run start:prod\"",
-    "lint": "cd frontend && bun run lint"
+    "dev": "concurrently -k -n web,api -c cyan,green \"npm run dev --prefix frontend\" \"npm run start:dev --prefix backend\"",
+    "build": "npm run build --prefix frontend && npm run build --prefix backend",
+    "build:web": "npm run build --prefix frontend",
+    "build:api": "npm run build --prefix backend",
+    "start": "concurrently -k -n web,api -c cyan,green \"npm run start --prefix frontend\" \"npm run start:prod --prefix backend\"",
+    "lint": "npm run lint --prefix frontend"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"
