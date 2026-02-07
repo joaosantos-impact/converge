@@ -3,7 +3,7 @@ import { defineConfig, env } from 'prisma/config';
 import path from 'node:path';
 
 export default defineConfig({
-  schema: path.join(__dirname, 'schema.prisma'),
+  schema: path.join(__dirname, '..', 'backend', 'prisma', 'schema.prisma'),
   datasource: {
     url: env('DATABASE_URL'),
   },
