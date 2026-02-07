@@ -2,6 +2,8 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import Image from 'next/image';
 import {
   PieChart,
   Pie,
@@ -101,9 +103,9 @@ export default function SharePage() {
         <div className="text-center">
           <h1 className="text-2xl font-medium text-white">Portfolio não encontrado</h1>
           <p className="text-white/50 mt-2 text-sm">Este link pode ter expirado ou sido revogado.</p>
-          <a href="/" className="inline-block mt-6 text-sm text-white/60 hover:text-white underline underline-offset-4">
+          <Link href="/" className="inline-block mt-6 text-sm text-white/60 hover:text-white underline underline-offset-4">
             Voltar ao Converge
-          </a>
+          </Link>
         </div>
       </div>
     );
@@ -114,9 +116,9 @@ export default function SharePage() {
       {/* Header bar */}
       <div className="border-b border-white/10">
         <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
-          <a href="/" className="text-sm font-medium tracking-tight text-white/80 hover:text-white">
+          <Link href="/" className="text-sm font-medium tracking-tight text-white/80 hover:text-white">
             CONVERGE
-          </a>
+          </Link>
           <span className="text-[10px] text-white/40 uppercase tracking-widest">
             Portfolio Público
           </span>
@@ -128,7 +130,7 @@ export default function SharePage() {
         <div className="flex items-center gap-4 mb-10">
           <div className="w-14 h-14 bg-white/10 flex items-center justify-center text-lg font-medium">
             {data.user.image ? (
-              <img src={data.user.image} alt="" className="w-full h-full object-cover" />
+              <Image src={data.user.image} alt="" width={56} height={56} className="w-full h-full object-cover" />
             ) : (
               data.user.name.slice(0, 2).toUpperCase()
             )}
@@ -318,9 +320,9 @@ export default function SharePage() {
           <p className="text-[11px] text-white/30">
             Dados atualizados em tempo real via exchanges
           </p>
-          <a href="/" className="text-[11px] text-white/30 hover:text-white transition-colors">
+          <Link href="/" className="text-[11px] text-white/30 hover:text-white transition-colors">
             Partilhado via <span className="font-medium">Converge</span>
-          </a>
+          </Link>
         </div>
       </div>
     </div>

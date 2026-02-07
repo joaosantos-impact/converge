@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { toast } from 'sonner';
 import {
   Select,
@@ -78,7 +78,7 @@ function ComparisonChart({
   const gradientIdA = 'cmp-grad-a';
   const gradientIdB = 'cmp-grad-b';
 
-  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload?: { date: string; a: number; b: number }; value: number }> }) => {
+  const renderTooltip = useCallback(({ active, payload }: { active?: boolean; payload?: Array<{ payload?: { date: string; a: number; b: number }; value: number }> }) => {
     if (active && payload && payload.length) {
       const d = payload[0].payload!;
       return (
@@ -100,7 +100,7 @@ function ComparisonChart({
       );
     }
     return null;
-  };
+  }, [labelA, labelB]);
 
   if (merged.length === 0) {
     return (
@@ -140,7 +140,7 @@ function ComparisonChart({
           width={60}
           dx={-4}
         />
-        <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'hsl(var(--foreground))', strokeWidth: 1, strokeDasharray: '4 4', opacity: 0.3 }} />
+        <Tooltip content={renderTooltip} cursor={{ stroke: 'hsl(var(--foreground))', strokeWidth: 1, strokeDasharray: '4 4', opacity: 0.3 }} />
         <Area
           type="monotone"
           dataKey="a"

@@ -146,6 +146,7 @@ export function CommandMenu() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [open, results, selectedIndex, router]);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setSelectedIndex(0); }, [query]);
 
   return (

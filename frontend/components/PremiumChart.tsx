@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useId, memo } from 'react';
+import { useMemo, useId, memo, useCallback } from 'react';
 import {
   AreaChart,
   Area,
@@ -73,7 +73,7 @@ export const PremiumChart = memo(function PremiumChart({
 
   const yAxisFormatter = formatValue || defaultYFormatter;
 
-  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload?: Record<string, unknown>; value?: number }> }) => {
+  const renderTooltip = useCallback(({ active, payload }: { active?: boolean; payload?: Array<{ payload?: Record<string, unknown>; value?: number }> }) => {
     if (active && payload && payload.length) {
       const d = payload[0].payload;
       if (!d) return null;
@@ -92,7 +92,7 @@ export const PremiumChart = memo(function PremiumChart({
       );
     }
     return null;
-  };
+  }, [formatValue, timeRange]);
 
   if (chartData.length === 0) {
     return (
@@ -133,7 +133,7 @@ export const PremiumChart = memo(function PremiumChart({
             dx={-4}
           />
         )}
-        <Tooltip content={<CustomTooltip />} cursor={{ stroke: strokeColor, strokeWidth: 1, strokeDasharray: '4 4', opacity: 0.4 }} />
+        <Tooltip content={renderTooltip} cursor={{ stroke: strokeColor, strokeWidth: 1, strokeDasharray: '4 4', opacity: 0.4 }} />
         <Area
           type="monotone"
           dataKey="value"

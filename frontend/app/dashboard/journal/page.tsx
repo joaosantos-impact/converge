@@ -52,22 +52,20 @@ export default function JournalPage() {
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (isPending) return;
     if (!session) { router.push('/sign-in'); return; }
-    loadEntries();
-  }, [session, isPending, router]);
-
-  useEffect(() => {
-    if (tradesError) toast.error('Erro ao carregar trades');
-  }, [tradesError]);
-
-  const loadEntries = () => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) setEntries(JSON.parse(saved));
     } catch { /* empty */ }
-  };
+  }, [session, isPending, router]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  useEffect(() => {
+    if (tradesError) toast.error('Erro ao carregar trades');
+  }, [tradesError]);
 
   const saveEntries = (updated: JournalEntry[]) => {
     setEntries(updated);

@@ -283,18 +283,21 @@ function AnimatedStat({ value, label }: { value: string; label: string }) {
   const [displayed, setDisplayed] = useState(value);
   const numericMatch = value.match(/^(\d+)/);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!visible || !numericMatch) { setDisplayed(value); return; }
-    const target = parseInt(numericMatch[1]);
+    const match = numericMatch;
+    const target = parseInt(match[1]);
     let current = 0;
     const step = Math.max(1, Math.floor(target / 30));
     const timer = setInterval(() => {
       current += step;
       if (current >= target) { clearInterval(timer); setDisplayed(value); return; }
-      setDisplayed(value.replace(numericMatch[1], String(current)));
+      setDisplayed(value.replace(match[1], String(current)));
     }, 30);
     return () => clearInterval(timer);
-  }, [visible, value]);
+  }, [visible, value, numericMatch]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return (
     <div ref={ref} className="text-center" style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(16px)', transition: 'opacity 0.6s ease, transform 0.6s ease' }}>

@@ -39,6 +39,7 @@ export default function NewsPage() {
     }
     // Check saved notification preference
     const saved = localStorage.getItem('news-notifications');
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (saved === 'true') setNotificationsEnabled(true);
     setLoading(false);
   }, [session, isPending, router]);

@@ -65,7 +65,7 @@ export default function BlogPostPage() {
             <div className="h-8 w-3/4 bg-white/[0.03] animate-pulse" />
             <div className="h-4 w-1/2 bg-white/[0.02] animate-pulse" />
             <div className="mt-12 space-y-3">
-              {[1,2,3,4,5,6].map(i => <div key={i} className="h-4 bg-white/[0.02] animate-pulse" style={{ width: `${70 + Math.random() * 30}%` }} />)}
+              {[75, 90, 60, 85, 70, 80].map((w, i) => <div key={i} className="h-4 bg-white/[0.02] animate-pulse" style={{ width: `${w}%` }} />)}
             </div>
           </div>
         ) : !post ? (

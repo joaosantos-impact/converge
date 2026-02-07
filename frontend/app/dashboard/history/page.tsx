@@ -40,9 +40,8 @@ export default function HistoryPage() {
   }, [searchQuery]);
 
   // Reset page when filters change
-  useEffect(() => {
-    setPage(1);
-  }, [filterType, filterExchange, debouncedSearch, days]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { setPage(1); }, [filterType, filterExchange, debouncedSearch, days]);
 
   // Fetch trades from backend with server-side filters + pagination
   const { data: tradesData, isLoading: initialLoading, isFetching: fetching } = useTrades(

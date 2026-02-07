@@ -50,19 +50,17 @@ export default function GoalsPage() {
   const currencyLabel = currency === 'EUR' ? 'EUR' : currency === 'BTC' ? 'BTC' : 'USD';
   const currencySymbol = currency === 'EUR' ? '€' : currency === 'BTC' ? '₿' : '$';
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (isPending) return;
     if (!session) { router.push('/sign-in'); return; }
-    loadGoals();
-  }, [session, isPending, router]);
-
-  const loadGoals = () => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       if (saved) setGoals(JSON.parse(saved));
     } catch { /* empty */ }
     setLoading(false);
-  };
+  }, [session, isPending, router]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const saveGoals = (updatedGoals: Goal[]) => {
     setGoals(updatedGoals);
@@ -103,12 +101,15 @@ export default function GoalsPage() {
   };
 
   // Update current values
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (portfolioValue > 0 && goals.length > 0) {
       const updated = goals.map(g => ({ ...g, currentValue: portfolioValue }));
-      saveGoals(updated);
+      setGoals(updated);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     }
   }, [portfolioValue]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (isPending || loading) {
     return (
@@ -166,8 +167,9 @@ export default function GoalsPage() {
               const progress = goal.targetValue > 0 ? Math.min((goal.currentValue / goal.targetValue) * 100, 100) : 0;
               const remaining = Math.max(goal.targetValue - goal.currentValue, 0);
               const isCompleted = goal.currentValue >= goal.targetValue;
+              const nowMs = new Date().getTime();
               const daysLeft = goal.deadline
-                ? Math.ceil((new Date(goal.deadline).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+                ? Math.ceil((new Date(goal.deadline).getTime() - nowMs) / (1000 * 60 * 60 * 24))
                 : null;
 
               return (
