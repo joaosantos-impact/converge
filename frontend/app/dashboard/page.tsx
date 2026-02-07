@@ -13,6 +13,7 @@ import { Onboarding } from '@/components/Onboarding';
 import { useLivePrices } from '@/lib/price-service';
 import { usePortfolio } from '@/hooks/use-portfolio';
 import { useExchangeAccounts } from '@/hooks/use-exchange-accounts';
+import { useAutoSync } from '@/hooks/use-auto-sync';
 import { toast } from 'sonner';
 import { FadeIn } from '@/components/animations';
 
@@ -23,8 +24,8 @@ export default function DashboardPage() {
   const { formatValue } = useCurrency();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { syncing, triggerSync } = useAutoSync();
   const [timeRange, setTimeRange] = useState<TimeRange>('30d');
-  const [syncing, setSyncing] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   // React Query — fetch ALL assets for dashboard calculations (top/worst)
@@ -70,26 +71,13 @@ export default function DashboardPage() {
   }, [exchanges]);
 
   const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const r = await fetch('/api/sync', { method: 'POST' });
-      if (r.ok) {
-        toast.success('Sincronizado');
-        // Invalidate all cached data after sync
-        queryClient.invalidateQueries({ queryKey: ['portfolio'] });
-        queryClient.invalidateQueries({ queryKey: ['portfolio-history'] });
-        queryClient.invalidateQueries({ queryKey: ['trades'] });
-        queryClient.invalidateQueries({ queryKey: ['exchange-accounts'] });
-      } else {
-        const data = await r.json();
-        if (r.status === 429) {
-          toast.error(data.error || 'Aguarda antes de sincronizar novamente');
-        } else {
-          toast.error(data.error || 'Erro');
-        }
-      }
-    } catch { toast.error('Erro na sincronização'); }
-    finally { setSyncing(false); }
+    const ok = await triggerSync();
+    if (ok) {
+      toast.success('Sincronizado');
+      queryClient.invalidateQueries({ queryKey: ['portfolio-history'] });
+    } else {
+      toast.error('Erro ou aguarda antes de sincronizar novamente');
+    }
   };
   const handleOnboardingComplete = () => {
     localStorage.setItem('onboarding-dismissed', 'true');
@@ -105,20 +93,32 @@ export default function DashboardPage() {
 
   if (showOnboarding) return <Onboarding userName={session?.user?.name || session?.user?.email?.split('@')[0]} onComplete={handleOnboardingComplete} />;
 
-  if (isPending || loading) {
+  if (isPending || loading || (syncing && !portfolio?.balances?.length)) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-6 w-48" />
-        <Skeleton className="h-[460px] flex items-center justify-center">
-          <div className="w-5 h-5 border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin" />
-        </Skeleton>
+        <div className="h-[460px] flex flex-col items-center justify-center gap-4 border border-border bg-card">
+          <div className="w-8 h-8 border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin" />
+          <p className="text-sm font-medium">{syncing ? 'Sincronizando...' : 'A carregar'}</p>
+          {syncing && <p className="text-xs text-muted-foreground">A primeira sync pode demorar mais</p>}
+        </div>
         <div className="grid gap-3 md:grid-cols-2"><Skeleton className="h-64" /><Skeleton className="h-64" /></div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      {/* Syncing overlay when we have data */}
+      {syncing && portfolio?.balances?.length ? (
+        <div className="absolute inset-0 bg-background/60 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
+          <div className="flex flex-col items-center gap-3 px-6 py-4 bg-card border border-border">
+            <div className="w-8 h-8 border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin" />
+            <p className="text-sm font-medium">Sincronizando...</p>
+            <p className="text-xs text-muted-foreground">A atualizar dados das exchanges</p>
+          </div>
+        </div>
+      ) : null}
       {/* Header */}
       <FadeIn>
         <div className="flex items-center justify-between">

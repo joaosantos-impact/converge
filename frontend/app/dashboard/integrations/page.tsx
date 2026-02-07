@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useSession } from '@/lib/auth-client';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useAutoSync } from '@/hooks/use-auto-sync';
 import {
   useExchangeAccounts,
   useInvalidateExchangeAccounts,
@@ -108,24 +109,17 @@ function IntegrationDetails({
 }) {
   const { data: details, isLoading } = useExchangeAccountDetails(account.id);
   const [deleting, setDeleting] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const invalidateAccounts = useInvalidateExchangeAccounts();
+  const { syncing, triggerSync } = useAutoSync();
 
   const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const res = await fetch('/api/sync', { method: 'POST' });
-      if (res.ok) {
-        toast.success('Sincronização iniciada');
-        invalidateAccounts();
-      } else {
-        toast.error('Erro ao sincronizar');
-      }
-    } catch {
+    const ok = await triggerSync();
+    if (ok) {
+      toast.success('Sincronização concluída');
+      invalidateAccounts();
+    } else {
       toast.error('Erro ao sincronizar');
-    } finally {
-      setSyncing(false);
     }
   };
 

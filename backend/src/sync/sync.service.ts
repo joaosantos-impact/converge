@@ -4,6 +4,20 @@ import { CcxtService } from '../exchanges/ccxt.service';
 
 const SYNC_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
+// Common base assets for first sync — ensures we fetch trades for sold-out positions
+// (on first sync we have no previouslyTradedAssets, so we'd miss symbols not in balance)
+const COMMON_BASE_ASSETS = [
+  'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'DOT', 'MATIC',
+  'LINK', 'UNI', 'ATOM', 'LTC', 'ETC', 'XLM', 'ALGO', 'FIL', 'VET', 'ICP',
+  'NEAR', 'APT', 'ARB', 'OP', 'INJ', 'SUI', 'SEI', 'TIA', 'IMX', 'STX',
+  'RUNE', 'FTM', 'AAVE', 'MKR', 'CRV', 'SAND', 'MANA', 'AXS', 'GALA', 'APE',
+  'PEPE', 'WIF', 'BONK', 'FLOKI', 'SHIB', 'JUP', 'WLD', 'STRK', 'PENDLE',
+  'TRX', 'HBAR', 'TON', 'KAVA', 'DYDX', 'ENA', 'EIGEN', 'ZRO', 'NOT',
+  'FET', 'RENDER', 'TAO', 'ONDO', 'JASMY', 'W', 'PYTH', 'DYM', 'PORTAL',
+  'ALT', 'MANTA', 'ZK', 'BLUR', 'GMX', 'LDO', '1INCH', 'SNX', 'COMP',
+  'YFI', 'SUSHI', 'CAKE', 'EPIC', 'MEME', 'ORDI', 'SATS', 'RATS', '1000SATS',
+];
+
 @Injectable()
 export class SyncService {
   private readonly logger = new Logger(SyncService.name);
@@ -190,13 +204,6 @@ export class SyncService {
           balance.total,
         );
 
-        const existing = await this.prisma.balance.findFirst({
-          where: {
-            exchangeAccountId: account.id,
-            asset: balance.asset,
-          },
-        });
-
         const data = {
           free: balance.free,
           locked: balance.locked,
@@ -204,20 +211,20 @@ export class SyncService {
           usdValue,
         };
 
-        if (existing) {
-          await this.prisma.balance.update({
-            where: { id: existing.id },
-            data,
-          });
-        } else {
-          await this.prisma.balance.create({
-            data: {
+        await this.prisma.balance.upsert({
+          where: {
+            exchangeAccountId_asset: {
               exchangeAccountId: account.id,
               asset: balance.asset,
-              ...data,
             },
-          });
-        }
+          },
+          update: data,
+          create: {
+            exchangeAccountId: account.id,
+            asset: balance.asset,
+            ...data,
+          },
+        });
       }
 
       // Remove balances for assets that no longer exist on the exchange
@@ -247,64 +254,149 @@ export class SyncService {
       ? lastTrade.timestamp.getTime() + 1
       : Date.now() - 5 * 365 * 24 * 60 * 60 * 1000;
 
-    // Include assets from current balances AND previously traded assets (to capture sells of sold-out positions)
+    // Include assets from: balances, previously traded, AND on first sync add common assets
+    // (first sync has no trades in DB yet — we'd miss sold-out positions like "bought then sold BTC")
     const balanceAssets = balances.map((b) => b.asset);
     const previouslyTradedAssets = await this.prisma.trade.findMany({
       where: { exchangeAccountId: account.id },
       select: { symbol: true },
       distinct: ['symbol'],
     });
-    const tradedBaseAssets = previouslyTradedAssets.map((t) => t.symbol.split('/')[0]).filter(Boolean);
-    const assets = [...new Set([...balanceAssets, ...tradedBaseAssets])];
+    const tradedBaseAssets = previouslyTradedAssets.map((t) =>
+      t.symbol.split('/')[0]?.split(':')[0] || t.symbol.split('/')[0],
+    ).filter(Boolean);
+    const isFirstSync = !lastTrade;
+    const assets = isFirstSync
+      ? [...new Set([...balanceAssets, ...tradedBaseAssets, ...COMMON_BASE_ASSETS])]
+      : [...new Set([...balanceAssets, ...tradedBaseAssets])];
+    if (isFirstSync) {
+      this.logger.log(
+        `First sync for ${account.name}: fetching trades for ${assets.length} assets (balances + common pairs)`,
+      );
+    }
+
+    const upsertTrades = async (
+      trades: Array<{
+        id: string;
+        symbol: string;
+        side: string;
+        type: string;
+        price: number;
+        amount: number;
+        cost: number;
+        fee: number;
+        feeCurrency: string;
+        timestamp: Date;
+        marketType: 'spot' | 'future';
+      }>,
+    ) => {
+      if (trades.length === 0) return;
+      const CHUNK_SIZE = 50;
+      for (let i = 0; i < trades.length; i += CHUNK_SIZE) {
+        const chunk = trades.slice(i, i + CHUNK_SIZE);
+        await Promise.all(
+          chunk.map((trade) =>
+            this.prisma.trade.upsert({
+              where: {
+                exchangeAccountId_exchangeTradeId_marketType: {
+                  exchangeAccountId: account.id,
+                  exchangeTradeId: trade.id,
+                  marketType: trade.marketType,
+                },
+              },
+              update: {},
+              create: {
+                exchangeAccountId: account.id,
+                exchangeTradeId: trade.id,
+                marketType: trade.marketType,
+                symbol: trade.symbol,
+                side: trade.side,
+                type: trade.type,
+                price: trade.price,
+                amount: trade.amount,
+                cost: trade.cost,
+                fee: trade.fee,
+                feeCurrency: trade.feeCurrency,
+                timestamp: trade.timestamp,
+              },
+            }),
+          ),
+        );
+      }
+      const mt = trades[0]?.marketType || 'spot';
+      this.logger.log(
+        `Synced ${trades.length} ${mt} trades from ${account.name}`,
+      );
+    };
+
+    let totalSynced = 0;
+
+    const onDelisted = async (symbol: string, exchangeId: string, marketType: string) => {
+      try {
+        await this.prisma.delistedSymbol.upsert({
+          where: {
+            exchange_symbol_marketType: {
+              exchange: exchangeId.toLowerCase(),
+              symbol,
+              marketType,
+            },
+          },
+          update: {},
+          create: {
+            exchange: exchangeId.toLowerCase(),
+            symbol,
+            marketType,
+          },
+        });
+        this.logger.debug(`Marked ${symbol} as delisted on ${exchangeId} (${marketType})`);
+      } catch (e) {
+        this.logger.warn(`Failed to record delisted symbol ${symbol}:`, e);
+      }
+    };
 
     try {
-      const trades = await this.ccxt.fetchAllTrades(
+      // 1. Spot trades (reuse exchange already loaded for balances)
+      const spotTrades = await this.ccxt.fetchAllTrades(
         exchange,
         assets,
         sinceTime,
+        'spot',
+        onDelisted,
       );
+      await upsertTrades(spotTrades);
+      totalSynced += spotTrades.length;
 
-      if (trades.length > 0) {
-        const CHUNK_SIZE = 50;
-        for (let i = 0; i < trades.length; i += CHUNK_SIZE) {
-          const chunk = trades.slice(i, i + CHUNK_SIZE);
-          await Promise.all(
-            chunk.map((trade) =>
-              this.prisma.trade.upsert({
-                where: {
-                  exchangeAccountId_exchangeTradeId: {
-                    exchangeAccountId: account.id,
-                    exchangeTradeId: trade.id,
-                  },
-                },
-                update: {},
-                create: {
-                  exchangeAccountId: account.id,
-                  exchangeTradeId: trade.id,
-                  symbol: trade.symbol,
-                  side: trade.side,
-                  type: trade.type,
-                  price: trade.price,
-                  amount: trade.amount,
-                  cost: trade.cost,
-                  fee: trade.fee,
-                  feeCurrency: trade.feeCurrency,
-                  timestamp: trade.timestamp,
-                },
-              }),
-            ),
+      // 2. Futures trades (perpetual/leverage) — try 'future' (Binance) then 'swap' (Bybit, OKX)
+      for (const futuresType of ['future', 'swap'] as const) {
+        try {
+          const futuresExchange = this.ccxt.createExchangeFromAccount(account, futuresType);
+          await futuresExchange.loadMarkets();
+          const futuresTrades = await this.ccxt.fetchAllTrades(
+            futuresExchange,
+            assets,
+            sinceTime,
+            'future', // store as 'future' regardless of CCXT type
+            onDelisted,
           );
+          if (futuresTrades.length > 0) {
+            await upsertTrades(futuresTrades);
+            totalSynced += futuresTrades.length;
+          }
+          break; // succeeded, no need to try 'swap'
+        } catch (futuresErr) {
+          if (futuresType === 'swap') {
+            this.logger.debug(
+              `Futures trades not available for ${account.exchange} (${account.name}): ${(futuresErr as Error).message}`,
+            );
+          }
         }
-        this.logger.log(
-          `Synced ${trades.length} new trades from ${account.name}`,
-        );
       }
 
       await this.prisma.exchangeAccount.update({
         where: { id: account.id },
         data: {
           lastSyncAt: new Date(),
-          lastSyncTradeCount: trades.length,
+          lastSyncTradeCount: totalSynced,
         },
       });
     } catch (tradeError) {

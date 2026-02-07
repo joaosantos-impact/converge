@@ -3,7 +3,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -18,6 +17,7 @@ import {
 import { useSession } from '@/lib/auth-client';
 import { useCurrency } from '@/app/providers';
 import { usePortfolio } from '@/hooks/use-portfolio';
+import { useAutoSync } from '@/hooks/use-auto-sync';
 import { AssetIcon } from '@/components/AssetIcon';
 import { useTrades } from '@/hooks/use-trades';
 import { toast } from 'sonner';
@@ -38,8 +38,7 @@ export default function PortfolioPage() {
   const { isPending } = useSession();
   const { formatValue } = useCurrency();
   const router = useRouter();
-  const queryClient = useQueryClient();
-  const [syncing, setSyncing] = useState(false);
+  const { syncing, triggerSync } = useAutoSync();
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -88,26 +87,9 @@ export default function PortfolioPage() {
   };
 
   const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const response = await fetch('/api/sync', { method: 'POST' });
-      if (response.ok) {
-        toast.success('Sincronizado');
-        queryClient.invalidateQueries({ queryKey: ['portfolio'] });
-        queryClient.invalidateQueries({ queryKey: ['trades'] });
-      } else {
-        const data = await response.json();
-        if (response.status === 429) {
-          toast.error(data.error || 'Aguarda antes de sincronizar novamente');
-        } else {
-          toast.error(data.error || 'Erro');
-        }
-      }
-    } catch {
-      toast.error('Erro na sincronização');
-    } finally {
-      setSyncing(false);
-    }
+    const ok = await triggerSync();
+    if (ok) toast.success('Sincronizado');
+    else toast.error('Erro ou aguarda antes de sincronizar novamente');
   };
 
   // Assets and pagination come from the backend
@@ -158,8 +140,8 @@ export default function PortfolioPage() {
               <Button onClick={handleShare} variant="outline" size="sm" disabled aria-label="Partilhar portfolio">
                 Partilhar
               </Button>
-              <Button onClick={handleSync} disabled size="sm" aria-label="Sincronizar dados">
-                Sincronizar
+              <Button onClick={handleSync} disabled={syncing} size="sm" aria-label="Sincronizar dados">
+                {syncing ? <div className="w-3.5 h-3.5 border-2 border-background/30 border-t-background animate-spin" /> : 'Sincronizar'}
               </Button>
             </div>
           </div>
@@ -167,15 +149,27 @@ export default function PortfolioPage() {
 
         <FadeIn delay={0.05}>
           <div className="border border-border bg-card flex flex-col items-center justify-center py-16 text-center">
-            <p className="text-sm font-medium mb-2">Ainda não tens dados de portfolio</p>
-            <p className="text-xs text-muted-foreground mb-6 max-w-sm">
-              Adiciona uma integração com as tuas exchanges para veres os teus assets, atividade e performance aqui.
-            </p>
-            <Button asChild size="sm">
-              <Link href="/dashboard/integrations/add">
-                Adicionar integração
-              </Link>
-            </Button>
+            {syncing ? (
+              <>
+                <div className="w-10 h-10 border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin mb-4" />
+                <p className="text-sm font-medium mb-2">Sincronizando...</p>
+                <p className="text-xs text-muted-foreground max-w-sm">
+                  A buscar saldos e trades das tuas exchanges. A primeira sync pode demorar mais.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium mb-2">Ainda não tens dados de portfolio</p>
+                <p className="text-xs text-muted-foreground mb-6 max-w-sm">
+                  Adiciona uma integração com as tuas exchanges para veres os teus assets, atividade e performance aqui.
+                </p>
+                <Button asChild size="sm">
+                  <Link href="/dashboard/integrations/add">
+                    Adicionar integração
+                  </Link>
+                </Button>
+              </>
+            )}
           </div>
         </FadeIn>
       </div>
@@ -183,7 +177,17 @@ export default function PortfolioPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {/* Syncing overlay when we have data */}
+      {syncing && portfolio?.balances?.length ? (
+        <div className="absolute inset-0 bg-background/60 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
+          <div className="flex flex-col items-center gap-3 px-6 py-4 bg-card border border-border">
+            <div className="w-8 h-8 border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin" />
+            <p className="text-sm font-medium">Sincronizando...</p>
+            <p className="text-xs text-muted-foreground">A atualizar dados das exchanges</p>
+          </div>
+        </div>
+      ) : null}
       {/* Header */}
       <FadeIn>
         <div className="flex items-center justify-between">

@@ -28,6 +28,7 @@ interface TradesParams {
   search?: string;
   side?: string;
   exchange?: string;
+  marketType?: 'spot' | 'future' | 'all';
   page?: number;
   limit?: number;
 }
@@ -39,6 +40,7 @@ async function fetchTrades(params: TradesParams = {}): Promise<TradesResponse> {
   if (params.search) sp.set('search', params.search);
   if (params.side && params.side !== 'all') sp.set('side', params.side);
   if (params.exchange && params.exchange !== 'all') sp.set('exchange', params.exchange);
+  if (params.marketType && params.marketType !== 'all') sp.set('marketType', params.marketType);
   if (params.page) sp.set('page', String(params.page));
   if (params.limit) sp.set('limit', String(params.limit));
 
@@ -53,7 +55,7 @@ async function fetchTrades(params: TradesParams = {}): Promise<TradesResponse> {
 export function useTrades(days: number = 90, symbol?: string, limit?: number, params?: Omit<TradesParams, 'days' | 'symbol' | 'limit'>) {
   const fullParams: TradesParams = { days, symbol, limit, ...params };
   return useQuery({
-    queryKey: ['trades', days, symbol, limit, params?.search, params?.side, params?.exchange, params?.page],
+    queryKey: ['trades', days, symbol, limit, params?.search, params?.side, params?.exchange, params?.marketType, params?.page],
     queryFn: () => fetchTrades(fullParams),
     staleTime: 2 * 60 * 1000,
     gcTime: 10 * 60 * 1000,

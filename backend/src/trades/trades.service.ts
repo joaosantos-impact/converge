@@ -38,14 +38,15 @@ export class TradesService {
       symbolFilter: string | null;
       sideFilter: string | null;
       exchangeFilter: string | null;
+      marketTypeFilter: string | null;
       page: number;
       limit: number;
     },
   ) {
-    const { days, symbolFilter, sideFilter, exchangeFilter, page, limit } = opts;
+    const { days, symbolFilter, sideFilter, exchangeFilter, marketTypeFilter, page, limit } = opts;
 
     // Check cache (keyed without page/side/exchange filters — those are applied post-cache)
-    const cacheKey = `${userId}:${days}:${symbolFilter || 'all'}`;
+    const cacheKey = `${userId}:${days}:${symbolFilter || 'all'}:${marketTypeFilter || 'all'}`;
     const cached = this.statsCache.get(cacheKey);
     const now = Date.now();
 
@@ -53,6 +54,7 @@ export class TradesService {
       return this.applyFiltersAndPaginate(cached.tradesWithPnl, cached.stats, {
         sideFilter,
         exchangeFilter,
+        marketTypeFilter,
         page,
         limit,
       });
@@ -64,6 +66,7 @@ export class TradesService {
     });
 
     if (accountIds.length === 0) {
+      this.logger.debug(`getTrades: no exchange accounts for user ${userId}`);
       return {
         trades: [],
         stats: this.emptyStats(),
@@ -77,6 +80,16 @@ export class TradesService {
 
     const accountMap = new Map(accountIds.map((a) => [a.id, a.exchange]));
     const ids = accountIds.map((a) => a.id);
+    const exchangeNames = [...new Set(accountIds.map((a) => a.exchange.toLowerCase()))];
+
+    // Load delisted symbols for user's exchanges
+    const delisted = await this.prisma.delistedSymbol.findMany({
+      where: { exchange: { in: exchangeNames } },
+      select: { exchange: true, symbol: true, marketType: true },
+    });
+    const delistedSet = new Set(
+      delisted.map((d) => `${d.exchange}:${d.symbol}:${d.marketType}`),
+    );
 
     const where: any = {
       exchangeAccountId: { in: ids },
@@ -92,6 +105,10 @@ export class TradesService {
       where.symbol = { contains: symbolFilter };
     }
 
+    if (marketTypeFilter) {
+      where.marketType = marketTypeFilter;
+    }
+
     const MAX_TRADES_FOR_PNL = 10000;
     const [total, trades] = await Promise.all([
       this.prisma.trade.count({ where }),
@@ -103,6 +120,7 @@ export class TradesService {
           symbol: true,
           side: true,
           type: true,
+          marketType: true,
           price: true,
           amount: true,
           cost: true,
@@ -153,26 +171,38 @@ export class TradesService {
 
       symbolPositions.set(symbol, pos);
 
+      const exchangeName = accountMap.get(t.exchangeAccountId) || '';
+      const isDelisted = delistedSet.has(
+        `${exchangeName.toLowerCase()}:${t.symbol}:${t.marketType}`,
+      );
       return {
         id: t.id,
         symbol: t.symbol,
         side: t.side,
         type: t.type,
+        marketType: t.marketType,
         price: t.price,
         amount: t.amount,
         cost: t.cost,
         fee: t.fee,
         feeCurrency: t.feeCurrency,
         timestamp: t.timestamp,
-        exchange: accountMap.get(t.exchangeAccountId) || '',
+        exchange: exchangeName,
         pnl,
         pnlPercent,
         costBasis,
+        isDelisted,
       };
     });
 
     const stats = this.calculateStats(tradesWithPnl);
     tradesWithPnl.reverse(); // Most recent first
+
+    if (total === 0 && trades.length === 0) {
+      this.logger.debug(
+        `getTrades: 0 trades for user ${userId} (accounts: ${ids.length}, days=${days}, symbolFilter=${symbolFilter || 'none'}, marketType=${marketTypeFilter || 'all'})`,
+      );
+    }
 
     // Store in cache
     this.statsCache.set(cacheKey, {
@@ -197,6 +227,7 @@ export class TradesService {
     return this.applyFiltersAndPaginate(tradesWithPnl, stats, {
       sideFilter,
       exchangeFilter,
+      marketTypeFilter,
       page,
       limit,
     });
@@ -208,22 +239,26 @@ export class TradesService {
     opts: {
       sideFilter: string | null;
       exchangeFilter: string | null;
+      marketTypeFilter: string | null;
       page: number;
       limit: number;
     },
   ) {
-    const { sideFilter, exchangeFilter, page, limit } = opts;
+    const { sideFilter, exchangeFilter, marketTypeFilter, page, limit } = opts;
 
     // Collect unique exchanges before filtering
     const exchanges = [...new Set(allTrades.map((t) => t.exchange).filter(Boolean))];
 
-    // Apply side and exchange filters
+    // Apply side, exchange and marketType filters
     let filtered = allTrades;
     if (sideFilter) {
       filtered = filtered.filter((t) => t.side === sideFilter);
     }
     if (exchangeFilter) {
       filtered = filtered.filter((t) => t.exchange === exchangeFilter);
+    }
+    if (marketTypeFilter) {
+      filtered = filtered.filter((t) => t.marketType === marketTypeFilter);
     }
 
     const total = filtered.length;

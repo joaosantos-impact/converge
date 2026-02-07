@@ -15,6 +15,7 @@ import {
 import { useSession } from '@/lib/auth-client';
 import { useCurrency } from '@/app/providers';
 import { useTrades } from '@/hooks/use-trades';
+import { useAutoSync } from '@/hooks/use-auto-sync';
 import { AssetIcon } from '@/components/AssetIcon';
 import { toast } from 'sonner';
 import { FadeIn } from '@/components/animations';
@@ -25,11 +26,13 @@ const PER_PAGE = 20;
 export default function HistoryPage() {
   const { isPending } = useSession();
   const { formatValue } = useCurrency();
+  const { syncing } = useAutoSync();
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'buy' | 'sell'>('all');
   const [filterExchange, setFilterExchange] = useState<string>('all');
-  const [days, setDays] = useState('90');
+  const [filterMarketType, setFilterMarketType] = useState<'all' | 'spot' | 'future'>('all');
+  const [days, setDays] = useState('0'); // 0 = all time (shows all trades by default)
   const [chartExpanded, setChartExpanded] = useState(true);
   const [page, setPage] = useState(1);
 
@@ -41,7 +44,7 @@ export default function HistoryPage() {
 
   // Reset to page 1 when filters change
   // eslint-disable-next-line react-hooks/set-state-in-effect -- reset pagination when filters change
-  useEffect(() => { setPage(1); }, [filterType, filterExchange, debouncedSearch, days]);
+  useEffect(() => { setPage(1); }, [filterType, filterExchange, filterMarketType, debouncedSearch, days]);
 
   // Fetch trades from backend with server-side filters + pagination
   const { data: tradesData, isLoading: initialLoading, isFetching: fetching } = useTrades(
@@ -52,13 +55,15 @@ export default function HistoryPage() {
       search: debouncedSearch || undefined,
       side: filterType !== 'all' ? filterType : undefined,
       exchange: filterExchange !== 'all' ? filterExchange : undefined,
+      marketType: filterMarketType !== 'all' ? filterMarketType : undefined,
       page,
     },
   );
 
-  // Also fetch ALL trades (no filter, high limit) for chart + stats — cached separately
+  // Also fetch ALL trades (same filters, high limit) for chart + stats — cached separately
   const { data: allTradesData } = useTrades(parseInt(days), undefined, 10000, {
     page: 1,
+    marketType: filterMarketType !== 'all' ? filterMarketType : undefined,
   });
 
   const trades = useMemo(() => tradesData?.trades || [], [tradesData]);
@@ -174,19 +179,33 @@ export default function HistoryPage() {
     return pages;
   };
 
-  if (isPending || initialLoading) {
+  if (isPending || initialLoading || (syncing && groupedTrades.length === 0)) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-8 w-32" />
-        <Skeleton className="h-[400px] flex items-center justify-center">
-          <div className="w-5 h-5 border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin" />
-        </Skeleton>
+        <div className="h-[400px] flex flex-col items-center justify-center gap-4 border border-border bg-card">
+          <div className="w-10 h-10 border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin" />
+          <p className="text-sm font-medium">{syncing ? 'Sincronizando...' : 'A carregar trades'}</p>
+          {syncing && (
+            <p className="text-xs text-muted-foreground">A primeira sync pode demorar mais</p>
+          )}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative">
+      {/* Syncing overlay when we have data */}
+      {syncing && groupedTrades.length > 0 ? (
+        <div className="absolute inset-0 bg-background/60 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
+          <div className="flex flex-col items-center gap-3 px-6 py-4 bg-card border border-border">
+            <div className="w-8 h-8 border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin" />
+            <p className="text-sm font-medium">Sincronizando...</p>
+            <p className="text-xs text-muted-foreground">A atualizar trades das exchanges</p>
+          </div>
+        </div>
+      ) : null}
       {/* Header */}
       <FadeIn>
         <div className="flex items-center justify-between">
@@ -279,6 +298,14 @@ export default function HistoryPage() {
             <SelectItem value="sell">Vendas</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={filterMarketType} onValueChange={(v) => setFilterMarketType(v as 'all' | 'spot' | 'future')}>
+          <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Spot + Futuros</SelectItem>
+            <SelectItem value="spot">Spot</SelectItem>
+            <SelectItem value="future">Futuros</SelectItem>
+          </SelectContent>
+        </Select>
         {exchanges.length > 0 && (
           <Select value={filterExchange} onValueChange={setFilterExchange}>
             <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
@@ -291,11 +318,11 @@ export default function HistoryPage() {
         <Select value={days} onValueChange={setDays}>
           <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
           <SelectContent>
+            <SelectItem value="0">Desde sempre</SelectItem>
             <SelectItem value="30">30 dias</SelectItem>
             <SelectItem value="90">90 dias</SelectItem>
             <SelectItem value="365">1 ano</SelectItem>
             <SelectItem value="730">2 anos</SelectItem>
-            <SelectItem value="0">Desde sempre</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -317,11 +344,24 @@ export default function HistoryPage() {
                       <div className={`w-0.5 h-10 shrink-0 ${trade.side === 'buy' ? 'bg-foreground' : 'bg-red-500'}`} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <AssetIcon symbol={trade.symbol.split('/')[0] || trade.symbol} size={20} />
+                          <AssetIcon symbol={trade.symbol.split('/')[0]?.split(':')[0] || trade.symbol.split('/')[0] || trade.symbol} size={20} />
                           <span className="font-medium text-xs">{trade.symbol}</span>
                           <span className={`text-[9px] px-1.5 py-0.5 ${trade.side === 'buy' ? 'bg-muted text-foreground' : 'bg-red-500/10 text-red-500'}`}>
                             {trade.side === 'buy' ? 'COMPRA' : 'VENDA'}
                           </span>
+                          {trade.marketType === 'future' && (
+                            <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                              FUTUROS
+                            </span>
+                          )}
+                          {trade.isDelisted && (
+                            <span
+                              className="text-[9px] px-1.5 py-0.5 bg-muted text-muted-foreground"
+                              title="Par deslistado da exchange"
+                            >
+                              DESLISTADO
+                            </span>
+                          )}
                         </div>
                         <p className="text-[10px] text-muted-foreground mt-0.5">
                           {new Date(trade.timestamp).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}

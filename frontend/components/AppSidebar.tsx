@@ -30,7 +30,6 @@ import { useSession, signOut } from "@/lib/auth-client";
 import {
   LayoutDashboard,
   Wallet,
-  Coins,
   Link2,
   Newspaper,
   Receipt,
@@ -51,7 +50,6 @@ const mainNav = [
   { title: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { title: "Portfolio", href: "/dashboard/portfolio", icon: Wallet },
   { title: "Integrações", href: "/dashboard/integrations", icon: Link2 },
-  { title: "Spot", href: "/dashboard/spot", icon: Coins },
   { title: "Trades", href: "/dashboard/history", icon: History },
   { title: "Alertas", href: "/dashboard/alerts", icon: Bell },
   { title: "Impostos", href: "/dashboard/taxes", icon: Receipt },

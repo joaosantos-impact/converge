@@ -16,6 +16,7 @@ export interface TradeData {
   symbol: string;
   side: 'buy' | 'sell';
   type: string;
+  marketType?: 'spot' | 'future';
   price: number;
   amount: number;
   cost: number;
@@ -27,6 +28,8 @@ export interface TradeData {
   pnl: number | null;
   pnlPercent: number | null;
   costBasis: number | null;
+  /** Symbol delisted from exchange (market no longer exists) */
+  isDelisted?: boolean;
 }
 
 export interface BalanceWithPrice extends BalanceData {

@@ -28,6 +28,7 @@ export class TradesController {
     @Query('search') searchParam?: string,
     @Query('side') sideParam?: string,
     @Query('exchange') exchangeParam?: string,
+    @Query('marketType') marketTypeParam?: string,
     @Query('page') pageParam?: string,
     @Query('limit') limitParam?: string,
   ) {
@@ -37,6 +38,7 @@ export class TradesController {
     const symbolFilter = (symbolParam || searchParam || '').toUpperCase() || null;
     const sideFilter = sideParam === 'buy' || sideParam === 'sell' ? sideParam : null;
     const exchangeFilter = exchangeParam && exchangeParam !== 'all' ? exchangeParam : null;
+    const marketTypeFilter = marketTypeParam === 'spot' || marketTypeParam === 'future' ? marketTypeParam : null;
     const rawPage = parseInt(pageParam || '1', 10);
     const page = Math.max(1, isNaN(rawPage) ? 1 : rawPage);
     const rawLimit = parseInt(limitParam || '20', 10);
@@ -45,13 +47,14 @@ export class TradesController {
       10000,
     );
 
-    this.logger.debug(`getTrades: days=${days}, page=${page}, limit=${limit}, side=${sideFilter}, exchange=${exchangeFilter}, symbol=${symbolFilter}`);
+    this.logger.debug(`getTrades: days=${days}, page=${page}, limit=${limit}, side=${sideFilter}, exchange=${exchangeFilter}, marketType=${marketTypeFilter}, symbol=${symbolFilter}`);
 
     return this.tradesService.getTrades(user.id, {
       days,
       symbolFilter,
       sideFilter,
       exchangeFilter,
+      marketTypeFilter,
       page,
       limit,
     });

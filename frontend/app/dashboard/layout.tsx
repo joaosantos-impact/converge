@@ -17,7 +17,7 @@ function SyncIndicator() {
   return (
     <div className="flex items-center gap-1.5" title="A sincronizar...">
       <div className="w-3.5 h-3.5 border-[1.5px] border-muted-foreground/20 border-t-muted-foreground animate-spin" />
-      <span className="text-[10px] text-muted-foreground hidden sm:inline">Sync</span>
+      <span className="text-[10px] text-muted-foreground hidden sm:inline">Sincronizando</span>
     </div>
   );
 }

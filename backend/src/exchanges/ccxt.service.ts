@@ -59,12 +59,15 @@ export class CcxtService {
     });
   }
 
-  createExchangeFromAccount(account: {
-    exchange: string;
-    apiKey: string;
-    apiSecret: string;
-    apiPassphrase?: string | null;
-  }): any {
+  createExchangeFromAccount(
+    account: {
+      exchange: string;
+      apiKey: string;
+      apiSecret: string;
+      apiPassphrase?: string | null;
+    },
+    marketType: 'spot' | 'future' | 'swap' = 'spot',
+  ): any {
     const exchangeName = account.exchange as SupportedExchange;
     const apiKey = this.encryption.decrypt(account.apiKey);
     const apiSecret = this.encryption.decrypt(account.apiSecret);
@@ -76,6 +79,7 @@ export class CcxtService {
       apiKey,
       secret: apiSecret,
       password,
+      options: { defaultType: marketType },
     });
   }
 
@@ -154,6 +158,7 @@ export class CcxtService {
     symbol: string,
     since?: number,
     limit = 100,
+    opts?: { marketType?: string; onDelisted?: (symbol: string, exchangeId: string, marketType: string) => void },
   ) {
     try {
       const trades = await exchange.fetchMyTrades(symbol, since, limit);
@@ -170,13 +175,69 @@ export class CcxtService {
         feeCurrency: trade.fee?.currency || 'USDT',
         timestamp: new Date(trade.timestamp),
       }));
-    } catch (error) {
+    } catch (error: unknown) {
+      const err = error as Error & { name?: string };
+      const isDelistedOrBadSymbol =
+        err?.name === 'BadSymbol' ||
+        err?.constructor?.name === 'BadSymbol' ||
+        (typeof err?.message === 'string' && err.message.includes('does not have market symbol'));
+      if (isDelistedOrBadSymbol) {
+        this.logger.debug(
+          `Skipping ${symbol} (delisted or not available): ${err?.message || error}`,
+        );
+        const exchangeId = exchange?.id || exchange?.name || 'unknown';
+        const marketType = opts?.marketType || 'spot';
+        opts?.onDelisted?.(symbol, exchangeId, marketType);
+        return [];
+      }
       this.logger.error(`Error fetching trades for ${symbol}:`, error);
       throw error;
     }
   }
 
-  async fetchAllTrades(exchange: any, assets: string[], since?: number) {
+  /**
+   * Build symbol list for the given market type.
+   * Spot: BTC/USDT. Futures: BTC/USDT:USDT (perpetual) or exchange-specific.
+   */
+  private buildSymbolsForMarket(
+    exchange: any,
+    assets: string[],
+    marketType: 'spot' | 'future',
+  ): string[] {
+    const symbolsToFetch: string[] = [];
+    const quoteCurrencies = ['USDT', 'USDC', 'BTC', 'ETH'];
+    const stablecoins = new Set([
+      'USDT', 'USDC', 'USD', 'BUSD', 'DAI', 'TUSD', 'FDUSD',
+    ]);
+
+    for (const asset of assets) {
+      if (stablecoins.has(asset)) continue;
+      for (const quote of quoteCurrencies) {
+        if (asset === quote) continue;
+        if (marketType === 'spot') {
+          const symbol = `${asset}/${quote}`;
+          if (exchange.markets?.[symbol]) symbolsToFetch.push(symbol);
+        } else {
+          // Futures: try perpetual format BASE/QUOTE:SETTLE (e.g. BTC/USDT:USDT)
+          const symbol = `${asset}/${quote}:${quote}`;
+          if (exchange.markets?.[symbol]) symbolsToFetch.push(symbol);
+          if (!exchange.markets?.[symbol]) {
+            const alt = `${asset}/${quote}`;
+            if (exchange.markets?.[alt]) symbolsToFetch.push(alt);
+          }
+        }
+      }
+    }
+    return symbolsToFetch;
+  }
+
+  async fetchAllTrades(
+    exchange: any,
+    assets: string[],
+    since?: number,
+    marketType: 'spot' | 'future' = 'spot',
+    onDelisted?: (symbol: string, exchangeId: string, marketType: string) => void,
+  ) {
     const allTrades: Array<{
       id: string;
       symbol: string;
@@ -188,41 +249,28 @@ export class CcxtService {
       fee: number;
       feeCurrency: string;
       timestamp: Date;
+      marketType: 'spot' | 'future';
     }> = [];
 
-    const quoteCurrencies = ['USDT', 'USDC', 'BTC', 'ETH'];
-    const stablecoins = new Set([
-      'USDT',
-      'USDC',
-      'USD',
-      'BUSD',
-      'DAI',
-      'TUSD',
-      'FDUSD',
-    ]);
-
-    const symbolsToFetch: string[] = [];
-    for (const asset of assets) {
-      if (stablecoins.has(asset)) continue;
-      for (const quote of quoteCurrencies) {
-        if (asset === quote) continue;
-        const symbol = `${asset}/${quote}`;
-        if (exchange.markets && exchange.markets[symbol]) {
-          symbolsToFetch.push(symbol);
-        }
-      }
-    }
+    const symbolsToFetch = this.buildSymbolsForMarket(exchange, assets, marketType);
 
     const BATCH_SIZE = 3;
     for (let i = 0; i < symbolsToFetch.length; i += BATCH_SIZE) {
       const batch = symbolsToFetch.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
-        batch.map((symbol) => this.fetchTrades(exchange, symbol, since, 500)),
+        batch.map((symbol) =>
+          this.fetchTrades(exchange, symbol, since, 500, {
+            marketType,
+            onDelisted,
+          }),
+        ),
       );
 
       for (const result of results) {
         if (result.status === 'fulfilled') {
-          allTrades.push(...result.value);
+          allTrades.push(
+            ...result.value.map((t: any) => ({ ...t, marketType })),
+          );
         }
       }
     }

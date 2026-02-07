@@ -151,6 +151,7 @@ model Trade {
   exchangeAccount   ExchangeAccount @relation(fields: [exchangeAccountId], references: [id], onDelete: Cascade)
 
   exchangeTradeId   String
+  marketType        String          @default("spot") // "spot" | "future" (incl. perpetual)
   symbol            String
   side              String
   type              String
@@ -163,11 +164,24 @@ model Trade {
   timestamp         DateTime
   createdAt         DateTime        @default(now())
 
-  @@unique([exchangeAccountId, exchangeTradeId])
+  @@unique([exchangeAccountId, exchangeTradeId, marketType])
   @@index([exchangeAccountId, symbol])
   @@index([exchangeAccountId, timestamp])
+  @@index([exchangeAccountId, marketType])
   @@index([timestamp])
   @@index([symbol, timestamp])
+}
+
+// Delisted symbols (market no longer exists on exchange)
+model DelistedSymbol {
+  id        String   @id @default(cuid())
+  exchange  String
+  symbol    String
+  marketType String  @default("spot") // "spot" | "future"
+  detectedAt DateTime @default(now())
+
+  @@unique([exchange, symbol, marketType])
+  @@index([exchange])
 }
 
 // Price alerts
