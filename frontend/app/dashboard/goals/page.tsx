@@ -105,16 +105,15 @@ export default function GoalsPage() {
     toast.success('Objetivo removido');
   };
 
-  // Update current values
-  /* eslint-disable react-hooks/exhaustive-deps */
+  // Update current values when portfolio value changes (intentionally omit goals from deps to avoid overwriting on every edit)
   useEffect(() => {
     if (portfolioValue > 0 && goals.length > 0) {
       const updated = goals.map(g => ({ ...g, currentValue: portfolioValue }));
       setGoals(updated);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- goals read only to sync currentValue when portfolioValue changes
   }, [portfolioValue]);
-  /* eslint-enable react-hooks/exhaustive-deps */
 
   if (isPending || loading) {
     return (

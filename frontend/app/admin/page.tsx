@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -98,35 +98,33 @@ export default function AdminPage() {
   const [deleteTarget, setDeleteTarget] = useState<{ type: 'post' | 'review'; id: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  /* eslint-disable react-hooks/exhaustive-deps */
-  useEffect(() => {
-    if (isPending) return;
-    if (!session) { router.push('/sign-in'); return; }
-    Promise.all([fetchStats(), fetchPosts(), fetchReviews()]).finally(() => setLoading(false));
-  }, [session, isPending]);
-  /* eslint-enable react-hooks/exhaustive-deps */
-
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     try {
       const r = await fetch('/api/admin/stats');
       if (r.status === 401) { router.push('/dashboard'); return; }
       if (r.ok) setStats(await r.json());
     } catch {}
-  };
+  }, [router]);
 
-  const fetchPosts = async () => {
+  const fetchPosts = useCallback(async () => {
     try {
       const r = await fetch('/api/blog?all=true');
       if (r.ok) setPosts(await r.json());
     } catch {}
-  };
+  }, []);
 
-  const fetchReviews = async () => {
+  const fetchReviews = useCallback(async () => {
     try {
       const r = await fetch('/api/reviews?all=true');
       if (r.ok) setReviews(await r.json());
     } catch {}
-  };
+  }, []);
+
+  useEffect(() => {
+    if (isPending) return;
+    if (!session) { router.push('/sign-in'); return; }
+    Promise.all([fetchStats(), fetchPosts(), fetchReviews()]).finally(() => setLoading(false));
+  }, [session, isPending, router, fetchStats, fetchPosts, fetchReviews]);
 
   // ── Blog handlers ──
   const handleNewPost = () => {
