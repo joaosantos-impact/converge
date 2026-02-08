@@ -16,6 +16,7 @@ import { useExchangeAccounts } from '@/hooks/use-exchange-accounts';
 import { useAutoSync } from '@/hooks/use-auto-sync';
 import { toast } from 'sonner';
 import { FadeIn } from '@/components/animations';
+import { AssetIcon } from '@/components/AssetIcon';
 
 type TimeRange = '24h' | '7d' | '30d' | '90d' | '1y' | 'all';
 
@@ -24,7 +25,7 @@ export default function DashboardPage() {
   const { formatValue } = useCurrency();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { syncing, triggerSync } = useAutoSync();
+  const { syncing, canSync, triggerSync } = useAutoSync();
   const [timeRange, setTimeRange] = useState<TimeRange>('30d');
   const [showOnboarding, setShowOnboarding] = useState(false);
 
@@ -42,6 +43,8 @@ export default function DashboardPage() {
   });
 
   const loading = portfolioLoading || exchangesLoading || chartLoading;
+  const hasAccounts = (exchanges?.length ?? 0) > 0;
+  const showSyncing = syncing && hasAccounts;
 
   const portfolioSymbols = useMemo(() => {
     return portfolio?.balances?.map(b => b.asset).filter(a => a !== 'USDT' && a !== 'USDC' && a !== 'BUSD') || [];
@@ -71,12 +74,12 @@ export default function DashboardPage() {
   }, [exchanges]);
 
   const handleSync = async () => {
-    const ok = await triggerSync();
+    const { ok, error } = await triggerSync();
     if (ok) {
       toast.success('Sincronizado');
       queryClient.invalidateQueries({ queryKey: ['portfolio-history'] });
     } else {
-      toast.error('Erro ou aguarda antes de sincronizar novamente');
+      toast.error(error || 'Erro ao sincronizar');
     }
   };
   const handleOnboardingComplete = () => {
@@ -93,14 +96,14 @@ export default function DashboardPage() {
 
   if (showOnboarding) return <Onboarding userName={session?.user?.name || session?.user?.email?.split('@')[0]} onComplete={handleOnboardingComplete} />;
 
-  if (isPending || loading || (syncing && !portfolio?.balances?.length)) {
+  if (isPending || loading || (showSyncing && !portfolio?.balances?.length)) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-6 w-48" />
         <div className="h-[460px] flex flex-col items-center justify-center gap-4 border border-border bg-card">
           <div className="w-8 h-8 border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin" />
-          <p className="text-sm font-medium">{syncing ? 'Sincronizando...' : 'A carregar'}</p>
-          {syncing && <p className="text-xs text-muted-foreground">A primeira sync pode demorar mais</p>}
+          <p className="text-sm font-medium">{showSyncing ? 'Sincronizando...' : 'A carregar'}</p>
+          {showSyncing && <p className="text-xs text-muted-foreground">A primeira sync pode demorar mais</p>}
         </div>
         <div className="grid gap-3 md:grid-cols-2"><Skeleton className="h-64" /><Skeleton className="h-64" /></div>
       </div>
@@ -109,16 +112,6 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4 relative">
-      {/* Syncing overlay when we have data */}
-      {syncing && portfolio?.balances?.length ? (
-        <div className="absolute inset-0 bg-background/60 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
-          <div className="flex flex-col items-center gap-3 px-6 py-4 bg-card border border-border">
-            <div className="w-8 h-8 border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin" />
-            <p className="text-sm font-medium">Sincronizando...</p>
-            <p className="text-xs text-muted-foreground">A atualizar dados das exchanges</p>
-          </div>
-        </div>
-      ) : null}
       {/* Header */}
       <FadeIn>
         <div className="flex items-center justify-between">
@@ -131,8 +124,8 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-          <Button onClick={handleSync} disabled={syncing} size="sm" variant="outline" className="h-8 text-xs">
-            {syncing ? <div className="w-3.5 h-3.5 border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin" /> : 'Sincronizar'}
+          <Button onClick={handleSync} disabled={syncing || !canSync} size="sm" variant="outline" className="h-8 text-xs" title={!canSync ? 'Aguarda o cooldown antes de sincronizar' : undefined}>
+            {showSyncing ? <div className="w-3.5 h-3.5 border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin" /> : 'Sincronizar'}
           </Button>
         </div>
       </FadeIn>
@@ -230,9 +223,7 @@ export default function DashboardPage() {
                     onClick={() => router.push(`/dashboard/portfolio/${b.asset.toLowerCase()}`)}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/dashboard/portfolio/${b.asset.toLowerCase()}`); } }}
                   >
-                    <div className="w-7 h-7 bg-muted flex items-center justify-center text-[10px] font-medium shrink-0">
-                      {b.asset.slice(0, 2)}
-                    </div>
+                    <AssetIcon symbol={b.asset} size={28} className="shrink-0 [&_img]:rounded-none" />
                     <div className="flex-1 min-w-0">
                       <span className="text-xs font-medium">{b.asset}</span>
                     </div>
@@ -274,9 +265,7 @@ export default function DashboardPage() {
                     onClick={() => router.push(`/dashboard/portfolio/${b.asset.toLowerCase()}`)}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); router.push(`/dashboard/portfolio/${b.asset.toLowerCase()}`); } }}
                   >
-                    <div className="w-7 h-7 bg-muted flex items-center justify-center text-[10px] font-medium shrink-0">
-                      {b.asset.slice(0, 2)}
-                    </div>
+                    <AssetIcon symbol={b.asset} size={28} className="shrink-0 [&_img]:rounded-none" />
                     <div className="flex-1 min-w-0">
                       <span className="text-xs font-medium">{b.asset}</span>
                     </div>

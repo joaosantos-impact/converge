@@ -12,6 +12,7 @@ export const {
   signIn,
   signUp,
   signOut,
+  updateUser,
   useSession,
   getSession,
   twoFactor,

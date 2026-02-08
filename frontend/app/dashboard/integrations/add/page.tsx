@@ -84,7 +84,7 @@ function AddIntegrationContent() {
 
       if (response.ok) {
         toast.success(`${integration.name} adicionado com sucesso`);
-        router.push('/dashboard/integrations');
+        router.push('/dashboard/integrations?syncing=1');
       } else {
         const data = await response.json();
         toast.error(data.error || 'Erro ao adicionar');

@@ -62,30 +62,32 @@ export class SyncService {
 
   /**
    * Manual sync trigger for a user.
+   * @param options.skipCooldown - When true (e.g. after adding an account), skip cooldown so sync runs and frontend sees loading.
    */
-  async triggerSync(userId: string) {
-    // Rate limit check
-    const recentSync = await this.prisma.syncLog.findFirst({
-      where: {
-        userId,
-        startedAt: { gte: new Date(Date.now() - SYNC_COOLDOWN_MS) },
-      },
-      orderBy: { startedAt: 'desc' },
-    });
+  async triggerSync(userId: string, options?: { skipCooldown?: boolean }) {
+    if (!options?.skipCooldown) {
+      const recentSync = await this.prisma.syncLog.findFirst({
+        where: {
+          userId,
+          startedAt: { gte: new Date(Date.now() - SYNC_COOLDOWN_MS) },
+        },
+        orderBy: { startedAt: 'desc' },
+      });
 
-    if (recentSync) {
-      const waitMs = Math.max(
-        0,
-        SYNC_COOLDOWN_MS -
-          (Date.now() - recentSync.startedAt.getTime()),
-      );
-      if (waitMs > 0) {
-        const waitMin = Math.max(1, Math.ceil(waitMs / 60000));
-        return {
-          error: `Aguarda ${waitMin} minuto${waitMin > 1 ? 's' : ''} antes de sincronizar novamente.`,
-          retryAfter: waitMs,
-          statusCode: 429,
-        };
+      if (recentSync) {
+        const waitMs = Math.max(
+          0,
+          SYNC_COOLDOWN_MS -
+            (Date.now() - recentSync.startedAt.getTime()),
+        );
+        if (waitMs > 0) {
+          const waitMin = Math.max(1, Math.ceil(waitMs / 60000));
+          return {
+            error: `Aguarda ${waitMin} minuto${waitMin > 1 ? 's' : ''} antes de sincronizar novamente.`,
+            retryAfter: waitMs,
+            statusCode: 429,
+          };
+        }
       }
     }
 
@@ -254,8 +256,8 @@ export class SyncService {
       ? lastTrade.timestamp.getTime() + 1
       : Date.now() - 5 * 365 * 24 * 60 * 60 * 1000;
 
-    // Include assets from: balances, previously traded, AND on first sync add common assets
-    // (first sync has no trades in DB yet — we'd miss sold-out positions like "bought then sold BTC")
+    // Include assets from: balances, previously traded, AND common assets
+    // Common assets are ALWAYS included so we never miss sold-out positions (e.g. sold all ADA in March)
     const balanceAssets = balances.map((b) => b.asset);
     const previouslyTradedAssets = await this.prisma.trade.findMany({
       where: { exchangeAccountId: account.id },
@@ -265,11 +267,10 @@ export class SyncService {
     const tradedBaseAssets = previouslyTradedAssets.map((t) =>
       t.symbol.split('/')[0]?.split(':')[0] || t.symbol.split('/')[0],
     ).filter(Boolean);
-    const isFirstSync = !lastTrade;
-    const assets = isFirstSync
-      ? [...new Set([...balanceAssets, ...tradedBaseAssets, ...COMMON_BASE_ASSETS])]
-      : [...new Set([...balanceAssets, ...tradedBaseAssets])];
-    if (isFirstSync) {
+    const assets = [
+      ...new Set([...balanceAssets, ...tradedBaseAssets, ...COMMON_BASE_ASSETS]),
+    ];
+    if (!lastTrade) {
       this.logger.log(
         `First sync for ${account.name}: fetching trades for ${assets.length} assets (balances + common pairs)`,
       );
@@ -392,7 +393,7 @@ export class SyncService {
         }
       }
 
-      await this.prisma.exchangeAccount.update({
+      await this.prisma.exchangeAccount.updateMany({
         where: { id: account.id },
         data: {
           lastSyncAt: new Date(),
@@ -404,7 +405,8 @@ export class SyncService {
         `Error syncing trades for ${account.name}:`,
         tradeError,
       );
-      await this.prisma.exchangeAccount.update({
+      // Use updateMany — account may have been deleted while sync was running
+      await this.prisma.exchangeAccount.updateMany({
         where: { id: account.id },
         data: { lastSyncAt: new Date() },
       });

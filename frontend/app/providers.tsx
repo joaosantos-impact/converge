@@ -147,16 +147,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider
-        attribute="class"
+        attribute="data-theme"
         defaultTheme="dark"
         enableSystem
         disableTransitionOnChange
       >
         <CurrencyProvider>
-          <TooltipProvider>
-            {children}
-          </TooltipProvider>
-        </CurrencyProvider>
+            <TooltipProvider>
+              {children}
+            </TooltipProvider>
+          </CurrencyProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

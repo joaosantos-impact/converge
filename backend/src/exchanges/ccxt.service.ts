@@ -153,28 +153,89 @@ export class CcxtService {
     return 0;
   }
 
+  private mapTrade(trade: any) {
+    return {
+      id: trade.id,
+      symbol: trade.symbol,
+      side: trade.side,
+      type: trade.type || 'unknown',
+      price: trade.price,
+      amount: trade.amount,
+      cost: trade.cost,
+      fee: trade.fee?.cost || 0,
+      feeCurrency: trade.fee?.currency || 'USDT',
+      timestamp: new Date(trade.timestamp),
+    };
+  }
+
+  /**
+   * Fetch trades for a symbol with pagination — continues until all trades are retrieved.
+   * Binance limits to 1000/request; without this we'd miss trades (e.g. recent ADA sells).
+   */
   async fetchTrades(
     exchange: any,
     symbol: string,
     since?: number,
-    limit = 100,
+    limit = 1000,
     opts?: { marketType?: string; onDelisted?: (symbol: string, exchangeId: string, marketType: string) => void },
-  ) {
-    try {
-      const trades = await exchange.fetchMyTrades(symbol, since, limit);
+  ): Promise<
+    Array<{
+      id: string;
+      symbol: string;
+      side: string;
+      type: string;
+      price: number;
+      amount: number;
+      cost: number;
+      fee: number;
+      feeCurrency: string;
+      timestamp: Date;
+    }>
+  > {
+    const LIMIT_PER_REQUEST = 1000;
+    const MAX_PAGES = 100;
+    const allTrades: Array<ReturnType<typeof this.mapTrade>> = [];
+    const seenIds = new Set<string>();
+    const isBinance = (exchange?.id || exchange?.name || '').toLowerCase().startsWith('binance');
+    let currentSince = since;
+    let fromId: string | undefined;
+    let page = 0;
 
-      return trades.map((trade: any) => ({
-        id: trade.id,
-        symbol: trade.symbol,
-        side: trade.side,
-        type: trade.type || 'unknown',
-        price: trade.price,
-        amount: trade.amount,
-        cost: trade.cost,
-        fee: trade.fee?.cost || 0,
-        feeCurrency: trade.fee?.currency || 'USDT',
-        timestamp: new Date(trade.timestamp),
-      }));
+    try {
+      while (page < MAX_PAGES) {
+        page++;
+        const params = fromId ? { fromId } : {};
+        const trades = await exchange.fetchMyTrades(
+          symbol,
+          fromId ? undefined : currentSince,
+          LIMIT_PER_REQUEST,
+          Object.keys(params).length ? params : undefined,
+        );
+        const mapped = trades.map((t: any) => this.mapTrade(t));
+
+        for (const t of mapped) {
+          if (!seenIds.has(t.id)) {
+            seenIds.add(t.id);
+            allTrades.push(t);
+          }
+        }
+
+        if (mapped.length < LIMIT_PER_REQUEST) break;
+
+        const last = mapped[mapped.length - 1];
+        if (isBinance && last.id) {
+          fromId = String(last.id);
+        } else {
+          currentSince = last.timestamp.getTime() + 1;
+          fromId = undefined;
+        }
+      }
+      if (page >= MAX_PAGES && allTrades.length > 0) {
+        this.logger.warn(
+          `fetchTrades ${symbol}: hit max pages (${MAX_PAGES}), got ${allTrades.length} trades`,
+        );
+      }
+      return allTrades;
     } catch (error: unknown) {
       const err = error as Error & { name?: string };
       const isDelistedOrBadSymbol =
@@ -205,9 +266,9 @@ export class CcxtService {
     marketType: 'spot' | 'future',
   ): string[] {
     const symbolsToFetch: string[] = [];
-    const quoteCurrencies = ['USDT', 'USDC', 'BTC', 'ETH'];
+    const quoteCurrencies = ['USDT', 'USDC', 'BTC', 'ETH', 'EUR'];
     const stablecoins = new Set([
-      'USDT', 'USDC', 'USD', 'BUSD', 'DAI', 'TUSD', 'FDUSD',
+      'USDT', 'USDC', 'USD', 'BUSD', 'DAI', 'TUSD', 'FDUSD', 'EUR',
     ]);
 
     for (const asset of assets) {
@@ -254,12 +315,19 @@ export class CcxtService {
 
     const symbolsToFetch = this.buildSymbolsForMarket(exchange, assets, marketType);
 
-    const BATCH_SIZE = 3;
+    const isBinance = (exchange?.id || exchange?.name || '').toLowerCase().startsWith('binance');
+    // Binance: 6000 request weight/min; fetchMyTrades = 10 weight → throttle to avoid 429
+    const BATCH_SIZE = isBinance ? 2 : 3;
+    const BINANCE_DELAY_MS = 550; // ~10 requests per minute per batch
+
     for (let i = 0; i < symbolsToFetch.length; i += BATCH_SIZE) {
+      if (isBinance && i > 0) {
+        await new Promise((r) => setTimeout(r, BINANCE_DELAY_MS));
+      }
       const batch = symbolsToFetch.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
         batch.map((symbol) =>
-          this.fetchTrades(exchange, symbol, since, 500, {
+          this.fetchTrades(exchange, symbol, since, 1000, {
             marketType,
             onDelisted,
           }),
@@ -271,6 +339,14 @@ export class CcxtService {
           allTrades.push(
             ...result.value.map((t: any) => ({ ...t, marketType })),
           );
+        } else if (result.status === 'rejected') {
+          const err = result.reason as Error & { message?: string };
+          const is429 = err?.message?.includes('429') || err?.message?.includes('Too Many Requests');
+          if (isBinance && is429) {
+            this.logger.warn('Binance rate limit (429), waiting 65s before continuing');
+            await new Promise((r) => setTimeout(r, 65_000));
+          }
+          throw result.reason;
         }
       }
     }

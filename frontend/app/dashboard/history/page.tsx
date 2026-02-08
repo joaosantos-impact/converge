@@ -16,6 +16,7 @@ import { useSession } from '@/lib/auth-client';
 import { useCurrency } from '@/app/providers';
 import { useTrades } from '@/hooks/use-trades';
 import { useAutoSync } from '@/hooks/use-auto-sync';
+import { useExchangeAccounts } from '@/hooks/use-exchange-accounts';
 import { AssetIcon } from '@/components/AssetIcon';
 import { toast } from 'sonner';
 import { FadeIn } from '@/components/animations';
@@ -27,6 +28,8 @@ export default function HistoryPage() {
   const { isPending } = useSession();
   const { formatValue } = useCurrency();
   const { syncing } = useAutoSync();
+  const { data: accounts = [] } = useExchangeAccounts();
+  const showSyncing = syncing && accounts.length > 0;
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'buy' | 'sell'>('all');
@@ -179,14 +182,14 @@ export default function HistoryPage() {
     return pages;
   };
 
-  if (isPending || initialLoading || (syncing && groupedTrades.length === 0)) {
+  if (isPending || initialLoading || (showSyncing && groupedTrades.length === 0)) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-8 w-32" />
         <div className="h-[400px] flex flex-col items-center justify-center gap-4 border border-border bg-card">
           <div className="w-10 h-10 border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin" />
-          <p className="text-sm font-medium">{syncing ? 'Sincronizando...' : 'A carregar trades'}</p>
-          {syncing && (
+          <p className="text-sm font-medium">{showSyncing ? 'Sincronizando...' : 'A carregar trades'}</p>
+          {showSyncing && (
             <p className="text-xs text-muted-foreground">A primeira sync pode demorar mais</p>
           )}
         </div>
@@ -196,16 +199,6 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-4 relative">
-      {/* Syncing overlay when we have data */}
-      {syncing && groupedTrades.length > 0 ? (
-        <div className="absolute inset-0 bg-background/60 backdrop-blur-[1px] z-10 flex items-center justify-center rounded-lg">
-          <div className="flex flex-col items-center gap-3 px-6 py-4 bg-card border border-border">
-            <div className="w-8 h-8 border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin" />
-            <p className="text-sm font-medium">Sincronizando...</p>
-            <p className="text-xs text-muted-foreground">A atualizar trades das exchanges</p>
-          </div>
-        </div>
-      ) : null}
       {/* Header */}
       <FadeIn>
         <div className="flex items-center justify-between">

@@ -13,6 +13,7 @@ import type { TradeData } from '@/lib/types';
 
 import { PremiumChart } from '@/components/PremiumChart';
 import { AssetIcon } from '@/components/AssetIcon';
+import { IntegrationIcon, hasIcon } from '@/components/IntegrationIcons';
 
 interface ExchangeBreakdown {
   exchange: string;
@@ -308,11 +309,17 @@ export default function AssetDetailPage() {
             <p className="text-xs font-medium">Distribuição</p>
           </div>
           <div className="divide-y divide-border">
-            {exchanges.map((ex) => (
+            {exchanges.map((ex) => {
+              const exchangeId = ex.exchange.toLowerCase();
+              return (
               <div key={ex.exchange} className="flex items-center gap-3 px-4 py-3">
-                <div className="w-7 h-7 bg-muted flex items-center justify-center text-[10px] font-medium shrink-0">
-                  {ex.exchange.slice(0, 2).toUpperCase()}
-                </div>
+                {hasIcon(exchangeId) ? (
+                  <IntegrationIcon id={exchangeId} size={28} className="shrink-0" />
+                ) : (
+                  <div className="w-7 h-7 bg-muted flex items-center justify-center text-[10px] font-medium shrink-0">
+                    {ex.exchange.slice(0, 2).toUpperCase()}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
                     <p className="text-xs font-medium capitalize">{ex.exchange}</p>
@@ -331,7 +338,8 @@ export default function AssetDetailPage() {
                   </div>
                 </div>
               </div>
-            ))}
+            );
+            })}
           </div>
         </div>
 

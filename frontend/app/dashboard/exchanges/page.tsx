@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@/lib/auth-client';
 import { useInvalidateExchangeAccounts } from '@/hooks/use-exchange-accounts';
+import { useAutoSync } from '@/hooks/use-auto-sync';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -69,6 +70,7 @@ export default function ExchangesPage() {
     refetchOnWindowFocus: true,
   });
   const invalidateAccounts = useInvalidateExchangeAccounts();
+  const { canSync } = useAutoSync();
   const [syncing, setSyncing] = useState<string | null>(null);
   
   // Dialog states
@@ -149,9 +151,14 @@ export default function ExchangesPage() {
     setSyncing(id);
     try {
       const response = await fetch('/api/sync', { method: 'POST' });
+      const data = await response.json().catch(() => ({}));
       if (response.ok) {
         toast.success('Sincronização completa');
         invalidateAccounts();
+      } else if (response.status === 429) {
+        toast.error(data?.error || 'Aguarda antes de sincronizar novamente');
+      } else {
+        toast.error(data?.error || 'Erro na sincronização');
       }
     } catch {
       toast.error('Erro na sincronização');
@@ -236,8 +243,9 @@ export default function ExchangesPage() {
                   size="sm" 
                   variant="outline"
                   onClick={() => handleSync(account.id)}
-                  disabled={syncing === account.id}
+                  disabled={syncing === account.id || !canSync}
                   className="w-full"
+                  title={!canSync ? 'Aguarda o cooldown antes de sincronizar' : undefined}
                 >
                   {syncing === account.id ? 'A sincronizar...' : 'Sincronizar'}
                 </Button>

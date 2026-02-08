@@ -10,6 +10,8 @@ export interface TradesResponse {
   limit: number;
   totalPages: number;
   exchanges: string[];
+  /** When set, backend truncated: user has more trades than fetched (recent trades may be missing) */
+  truncated?: number;
   stats?: {
     totalPnl: number;
     wins: number;

@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Switch } from '@/components/ui/switch';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Select,
   SelectContent,
@@ -33,21 +34,28 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
-import { useSession, signOut } from '@/lib/auth-client';
+import { useSession, signOut, updateUser } from '@/lib/auth-client';
 import { useCurrency } from '@/app/providers';
 import { useTheme } from 'next-themes';
 import { useNotifications } from '@/lib/notifications';
 import { TwoFactorSetup } from '@/components/TwoFactorSetup';
 import { toast } from 'sonner';
 import { FadeIn } from '@/components/animations';
+import { Camera, Loader2 } from 'lucide-react';
 
 export default function SettingsPage() {
-  const { data: session, isPending } = useSession();
+  const { data: session, isPending, refetch } = useSession();
   const router = useRouter();
   const { currency, setCurrency } = useCurrency();
   const { theme, setTheme } = useTheme();
   const { isSupported, isGranted, isDenied, requestPermission } = useNotifications();
   const [loading, setLoading] = useState(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Profile
+  const [profileName, setProfileName] = useState('');
+  const [profileImageUrl, setProfileImageUrl] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
   
   // Password change
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
@@ -77,8 +85,42 @@ export default function SettingsPage() {
       router.push('/sign-in');
       return;
     }
+    setProfileName(session.user?.name ?? '');
+    setProfileImageUrl(session.user?.image ?? '');
     setLoading(false);
   }, [session, isPending, router]);
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true);
+    try {
+      const { error } = await updateUser({
+        name: profileName.trim() || undefined,
+        image: profileImageUrl.trim() || undefined,
+      });
+      if (error) {
+        toast.error(error.message ?? 'Erro ao guardar perfil');
+        return;
+      }
+      await refetch?.();
+      toast.success('Perfil atualizado');
+    } catch {
+      toast.error('Erro ao guardar perfil');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setProfileImageUrl(dataUrl);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
 
   const [signingOut, setSigningOut] = useState(false);
   const [enablingNotifs, setEnablingNotifs] = useState(false);
@@ -157,7 +199,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-8 max-w-xl mx-auto">
+    <div className="space-y-8 max-w-2xl mx-auto">
       {/* Header */}
       <FadeIn>
         <div>
@@ -166,22 +208,76 @@ export default function SettingsPage() {
         </div>
       </FadeIn>
 
-      {/* Account */}
-      <section className="space-y-4">
-        <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Conta</h2>
-        
-        <div className="p-4 border border-border bg-card space-y-4">
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Email</Label>
-            <p className="text-sm">{session?.user?.email}</p>
+      {/* Profile card - photo left, info right */}
+      <FadeIn>
+        <section className="border border-border bg-card">
+          <div className="flex flex-col sm:flex-row gap-6 p-6">
+            {/* Left: avatar + image controls */}
+            <div className="flex flex-col items-center sm:items-start gap-3 shrink-0">
+              <div className="relative group">
+                <Avatar className="h-24 w-24 rounded-sm">
+                  <AvatarImage src={profileImageUrl || undefined} alt="" />
+                  <AvatarFallback className="rounded-sm text-lg font-medium bg-muted">
+                    {(profileName || session?.user?.email || '?').slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageFile}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-sm"
+                  aria-label="Alterar foto"
+                >
+                  <Camera className="h-6 w-6 text-white" />
+                </button>
+              </div>
+              <div className="w-full sm:w-48 space-y-2">
+                <Label className="text-xs text-muted-foreground">URL da imagem</Label>
+                <Input
+                  placeholder="https://..."
+                  value={profileImageUrl}
+                  onChange={(e) => setProfileImageUrl(e.target.value)}
+                  className="text-sm h-8"
+                />
+              </div>
+            </div>
+
+            {/* Right: name, email, save */}
+            <div className="flex-1 min-w-0 space-y-4">
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Nome</Label>
+                <Input
+                  value={profileName}
+                  onChange={(e) => setProfileName(e.target.value)}
+                  placeholder="O teu nome"
+                  className="text-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">Email</Label>
+                <p className="text-sm text-muted-foreground">{session?.user?.email}</p>
+              </div>
+              <Button
+                size="sm"
+                onClick={handleSaveProfile}
+                disabled={savingProfile}
+              >
+                {savingProfile ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  'Guardar perfil'
+                )}
+              </Button>
+            </div>
           </div>
-          
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground">Nome</Label>
-            <p className="text-sm">{session?.user?.name || '—'}</p>
-          </div>
-        </div>
-      </section>
+        </section>
+      </FadeIn>
 
       {/* Security */}
       <section className="space-y-4">
@@ -232,10 +328,10 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium">Tema</p>
-              <p className="text-xs text-muted-foreground">Aparência da interface</p>
+              <p className="text-xs text-muted-foreground">Claro ou escuro</p>
             </div>
-            <Select value={theme} onValueChange={setTheme}>
-              <SelectTrigger className="w-24">
+            <Select value={theme ?? 'dark'} onValueChange={setTheme}>
+              <SelectTrigger className="w-28">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

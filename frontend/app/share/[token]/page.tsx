@@ -15,17 +15,19 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import { AssetIcon } from '@/components/AssetIcon';
 
-// Neutral palette for pie chart
+// Distinct palette for allocation pie — easy to differentiate on dark background
 const COLORS = [
-  'hsl(0 0% 90%)',   // near-white
-  'hsl(0 0% 70%)',   // light grey
-  'hsl(0 0% 50%)',   // mid grey
-  'hsl(0 0% 35%)',   // dark grey
-  'hsl(0 0% 20%)',   // charcoal
-  'hsl(0 0% 60%)',
-  'hsl(0 0% 45%)',
-  'hsl(0 0% 80%)',
+  '#3b82f6', // blue
+  '#22c55e', // emerald
+  '#f59e0b', // amber
+  '#8b5cf6', // violet
+  '#ec4899', // pink
+  '#06b6d4', // cyan
+  '#f97316', // orange
+  '#84cc16', // lime
+  '#a855f7', // purple
 ];
 
 interface SharedPortfolio {
@@ -204,7 +206,11 @@ export default function SharePage() {
                   {chartData.map((item, i) => (
                     <div key={item.name} className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2">
-                        <div className="w-2.5 h-2.5" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                        {item.name !== 'Outros' ? (
+                          <AssetIcon symbol={item.name} size={20} className="shrink-0 [&_img]:rounded-none" />
+                        ) : (
+                          <div className="w-5 h-5 shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
+                        )}
                         <span className="text-white/70">{item.name}</span>
                       </div>
                       <span className="font-medium">{item.value.toFixed(1)}%</span>
@@ -279,9 +285,7 @@ export default function SharePage() {
             {data.portfolio.balances.map((balance, i) => (
               <div key={i} className="grid grid-cols-12 gap-4 px-6 py-3.5 items-center hover:bg-white/[0.02] transition-colors">
                 <div className="col-span-4 flex items-center gap-3">
-                  <div className="w-8 h-8 bg-white/10 flex items-center justify-center text-[10px] font-medium shrink-0">
-                    {balance.asset.slice(0, 3)}
-                  </div>
+                  <AssetIcon symbol={balance.asset} size={32} className="shrink-0 [&_img]:rounded-none" />
                   <div>
                     <span className="text-sm font-medium">{balance.asset}</span>
                     {balance.exchange && (

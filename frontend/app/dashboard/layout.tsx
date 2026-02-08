@@ -8,11 +8,13 @@ import { CommandMenu } from "@/components/CommandMenu";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Breadcrumbs } from "@/components/Breadcrumbs";
 import { useAutoSync } from "@/hooks/use-auto-sync";
+import { useExchangeAccounts } from "@/hooks/use-exchange-accounts";
 
 function SyncIndicator() {
   const { syncing } = useAutoSync();
+  const { data: accounts = [] } = useExchangeAccounts();
 
-  if (!syncing) return null;
+  if (!syncing || accounts.length === 0) return null;
 
   return (
     <div className="flex items-center gap-1.5" title="A sincronizar...">

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -111,15 +111,15 @@ function IntegrationDetails({
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const invalidateAccounts = useInvalidateExchangeAccounts();
-  const { syncing, triggerSync } = useAutoSync();
+  const { syncing, canSync, triggerSync } = useAutoSync();
 
   const handleSync = async () => {
-    const ok = await triggerSync();
+    const { ok, error } = await triggerSync();
     if (ok) {
       toast.success('Sincronização concluída');
       invalidateAccounts();
     } else {
-      toast.error('Erro ao sincronizar');
+      toast.error(error || 'Erro ao sincronizar');
     }
   };
 
@@ -219,8 +219,9 @@ function IntegrationDetails({
         <Button
           variant="outline"
           onClick={handleSync}
-          disabled={syncing}
+          disabled={syncing || !canSync}
           className="flex-1"
+          title={!canSync ? 'Aguarda o cooldown antes de sincronizar' : undefined}
         >
           {syncing ? (
             <div className="w-4 h-4 border-2 border-foreground/30 border-t-foreground animate-spin" />
@@ -390,11 +391,15 @@ function IntegrationForm({ integration, onSuccess, onCancel }: { integration: In
 export default function IntegrationsPage() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isMobile = useIsMobile();
   const [search, setSearch] = useState('');
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<ExchangeAccount | null>(null);
   const [dialogMode, setDialogMode] = useState<'add' | 'details' | null>(null);
+
+  const pollFast = searchParams.get('syncing') === '1';
+  const { syncing } = useAutoSync({ pollFast });
 
   const { data: accountsData = [], error: accountsError } = useExchangeAccounts();
   const invalidateAccounts = useInvalidateExchangeAccounts();
@@ -517,6 +522,14 @@ export default function IntegrationsPage() {
           </div>
         </div>
       </FadeIn>
+
+      {/* Syncing banner when we just added an integration (hide when no accounts — e.g. last one removed) */}
+      {syncing && connectedCount > 0 && (
+        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-muted border border-border">
+          <div className="w-4 h-4 border-2 border-foreground/30 border-t-foreground animate-spin shrink-0" />
+          <span className="text-sm text-muted-foreground">A sincronizar a nova integração…</span>
+        </div>
+      )}
 
       {/* Search */}
       <div className="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">

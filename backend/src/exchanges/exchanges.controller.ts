@@ -176,8 +176,8 @@ export class ExchangesController {
       },
     });
 
-    // Auto-sync immediately after creation (non-blocking)
-    this.syncService.syncAccount(account).catch((err) => {
+    // Trigger full sync so SyncLog is created and frontend shows loading; skip cooldown for "just added"
+    this.syncService.triggerSync(user.id, { skipCooldown: true }).catch((err) => {
       this.logger.error(`Auto-sync failed for ${account.name}:`, err);
     });
 

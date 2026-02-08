@@ -44,7 +44,7 @@ export class TradesController {
     const rawLimit = parseInt(limitParam || '20', 10);
     const limit = Math.min(
       Math.max(1, isNaN(rawLimit) ? 20 : rawLimit),
-      10000,
+      100000,
     );
 
     this.logger.debug(`getTrades: days=${days}, page=${page}, limit=${limit}, side=${sideFilter}, exchange=${exchangeFilter}, marketType=${marketTypeFilter}, symbol=${symbolFilter}`);

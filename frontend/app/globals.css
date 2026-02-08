@@ -1,81 +1,85 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:is(.dark *));
+/* dark: variant - matches [data-theme="dark"] on html (next-themes default) */
+@custom-variant dark (&:is([data-theme="dark"] *));
 
-:root {
+/* Light theme - azul-cinza suave (comum em fintech/SaaS) */
+:root,
+[data-theme="light"] {
   --radius: 0.25rem;
-  --background: hsl(0 0% 98%);
-  --foreground: hsl(240 10% 8%);
-  --card: hsl(0 0% 100%);
-  --card-foreground: hsl(240 10% 8%);
-  --popover: hsl(0 0% 100%);
-  --popover-foreground: hsl(240 10% 8%);
-  --primary: hsl(240 10% 8%);
+  --background: hsl(210 25% 97%);
+  --foreground: hsl(215 25% 15%);
+  --card: hsl(210 20% 99%);
+  --card-foreground: hsl(215 25% 15%);
+  --popover: hsl(210 20% 99%);
+  --popover-foreground: hsl(215 25% 15%);
+  --primary: hsl(221 83% 48%);
   --primary-foreground: hsl(0 0% 100%);
-  --secondary: hsl(240 5% 94%);
-  --secondary-foreground: hsl(240 10% 8%);
-  --muted: hsl(240 5% 94%);
-  --muted-foreground: hsl(240 5% 46%);
-  --accent: hsl(240 5% 94%);
-  --accent-foreground: hsl(240 10% 8%);
+  --secondary: hsl(210 18% 92%);
+  --secondary-foreground: hsl(215 25% 15%);
+  --muted: hsl(210 15% 93%);
+  --muted-foreground: hsl(215 15% 45%);
+  --accent: hsl(210 30% 91%);
+  --accent-foreground: hsl(215 25% 15%);
   --destructive: hsl(0 84% 60%);
   --destructive-foreground: hsl(0 0% 100%);
   --success: hsl(142 76% 36%);
   --success-foreground: hsl(0 0% 100%);
-  --border: hsl(240 5% 88%);
-  --input: hsl(240 5% 88%);
-  --ring: hsl(240 5% 65%);
+  --border: hsl(210 18% 88%);
+  --input: hsl(210 18% 90%);
+  --ring: hsl(221 83% 48%);
   --chart-1: hsl(221 83% 53%);
   --chart-2: hsl(142 76% 36%);
   --chart-3: hsl(38 92% 50%);
   --chart-4: hsl(262 83% 58%);
   --chart-5: hsl(0 84% 60%);
-  --sidebar: hsl(0 0% 98%);
-  --sidebar-foreground: hsl(240 5% 35%);
-  --sidebar-primary: hsl(240 10% 8%);
+  --sidebar: hsl(210 22% 95%);
+  --sidebar-foreground: hsl(215 20% 35%);
+  --sidebar-primary: hsl(221 83% 48%);
   --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 5% 94%);
-  --sidebar-accent-foreground: hsl(240 10% 8%);
-  --sidebar-border: hsl(240 5% 88%);
-  --sidebar-ring: hsl(221 83% 53%);
+  --sidebar-accent: hsl(210 25% 90%);
+  --sidebar-accent-foreground: hsl(215 25% 15%);
+  --sidebar-border: hsl(210 18% 88%);
+  --sidebar-ring: hsl(221 83% 48%);
 }
 
-.dark {
-  --background: hsl(240 10% 4%);
-  --foreground: hsl(0 0% 98%);
-  --card: hsl(240 10% 6%);
-  --card-foreground: hsl(0 0% 98%);
-  --popover: hsl(240 10% 6%);
-  --popover-foreground: hsl(0 0% 98%);
-  --primary: hsl(0 0% 98%);
-  --primary-foreground: hsl(240 10% 4%);
-  --secondary: hsl(240 5% 13%);
-  --secondary-foreground: hsl(0 0% 98%);
-  --muted: hsl(240 5% 13%);
-  --muted-foreground: hsl(240 5% 60%);
-  --accent: hsl(240 5% 13%);
-  --accent-foreground: hsl(0 0% 98%);
+/* Dark theme - azul escuro/navy (comum em dashboards) */
+[data-theme="dark"] {
+  --background: hsl(222 28% 9%);
+  --foreground: hsl(210 20% 95%);
+  --card: hsl(222 25% 11%);
+  --card-foreground: hsl(210 20% 95%);
+  --popover: hsl(222 25% 11%);
+  --popover-foreground: hsl(210 20% 95%);
+  --primary: hsl(210 100% 60%);
+  --primary-foreground: hsl(222 28% 9%);
+  --secondary: hsl(222 22% 15%);
+  --secondary-foreground: hsl(210 20% 95%);
+  --muted: hsl(222 20% 16%);
+  --muted-foreground: hsl(210 15% 60%);
+  --accent: hsl(218 25% 18%);
+  --accent-foreground: hsl(210 20% 95%);
   --destructive: hsl(0 72% 51%);
   --destructive-foreground: hsl(0 0% 100%);
   --success: hsl(142 76% 36%);
-  --success-foreground: hsl(240 10% 4%);
-  --border: hsl(240 5% 18%);
-  --input: hsl(240 5% 18%);
-  --ring: hsl(240 5% 40%);
+  --success-foreground: hsl(222 28% 9%);
+  --border: hsl(222 22% 18%);
+  --input: hsl(222 22% 18%);
+  --ring: hsl(210 100% 60%);
   --chart-1: hsl(221 83% 58%);
   --chart-2: hsl(142 76% 42%);
   --chart-3: hsl(38 92% 55%);
   --chart-4: hsl(262 83% 63%);
   --chart-5: hsl(0 84% 65%);
-  --sidebar: hsl(240 10% 5%);
-  --sidebar-foreground: hsl(240 5% 65%);
-  --sidebar-primary: hsl(0 0% 98%);
-  --sidebar-primary-foreground: hsl(240 10% 4%);
-  --sidebar-accent: hsl(240 5% 10%);
-  --sidebar-accent-foreground: hsl(0 0% 98%);
-  --sidebar-border: hsl(240 5% 15%);
-  --sidebar-ring: hsl(221 83% 58%);
+  --sidebar: hsl(222 30% 8%);
+  --sidebar-foreground: hsl(210 15% 65%);
+  --sidebar-primary: hsl(210 100% 60%);
+  --sidebar-primary-foreground: hsl(222 28% 9%);
+  --sidebar-accent: hsl(218 24% 14%);
+  --sidebar-accent-foreground: hsl(210 20% 95%);
+  --sidebar-border: hsl(222 22% 16%);
+  --sidebar-ring: hsl(210 100% 60%);
 }
 
 @theme inline {
@@ -150,12 +154,15 @@
 
 /* Selection */
 ::selection {
-  background: hsl(240 5% 30%);
-  color: white;
+  background: hsl(221 83% 48% / 0.2);
+  color: inherit;
+}
+[data-theme="dark"] ::selection {
+  background: hsl(210 100% 60% / 0.35);
 }
 
-.dark ::selection {
-  background: hsl(240 5% 50%);
+[data-theme="dark"] ::selection {
+  background: hsl(210 100% 60% / 0.35);
 }
 
 /* Focus-visible ring for keyboard navigation */

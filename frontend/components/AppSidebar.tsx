@@ -96,7 +96,7 @@ export function AppSidebar() {
             <SidebarMenuButton 
               asChild 
               isActive={isActive}
-              className="h-7 px-2 transition-colors hover:bg-sidebar-accent data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium"
+              className="h-8 px-2.5 transition-colors hover:bg-sidebar-accent data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium"
             >
               <Link href={item.href} aria-current={isActive ? 'page' : undefined}>
                 <item.icon className="h-3.5 w-3.5 shrink-0" />
@@ -167,8 +167,12 @@ export function AppSidebar() {
           <div className={`flex items-center gap-2 px-2 py-1.5 transition-colors cursor-pointer ${
             settingsActive ? 'bg-sidebar-accent' : 'hover:bg-sidebar-accent/50'
           }`}>
-            <div className="w-6 h-6 bg-muted flex items-center justify-center text-[10px] font-medium shrink-0">
-              {userName.slice(0, 2).toUpperCase()}
+            <div className="w-6 h-6 bg-muted flex items-center justify-center text-[10px] font-medium shrink-0 rounded-sm overflow-hidden">
+              {session?.user?.image ? (
+                <img src={session.user.image} alt="" className="w-full h-full object-cover" />
+              ) : (
+                userName.slice(0, 2).toUpperCase()
+              )}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-medium truncate">{userName}</p>

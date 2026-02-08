@@ -109,7 +109,8 @@ export class TradesService {
       where.marketType = marketTypeFilter;
     }
 
-    const MAX_TRADES_FOR_PNL = 10000;
+    // Taxes/FIFO need full history. 10k was truncating recent trades (e.g. 2025 sales).
+    const MAX_TRADES_FOR_PNL = 100000;
     const [total, trades] = await Promise.all([
       this.prisma.trade.count({ where }),
       this.prisma.trade.findMany({
@@ -224,12 +225,20 @@ export class TradesService {
       }
     }
 
+    const truncated = total > trades.length;
+    if (truncated) {
+      this.logger.warn(
+        `getTrades: ${total} trades in DB but only ${trades.length} fetched (cap). Recent trades may be missing.`,
+      );
+    }
+
     return this.applyFiltersAndPaginate(tradesWithPnl, stats, {
       sideFilter,
       exchangeFilter,
       marketTypeFilter,
       page,
       limit,
+      truncated: truncated ? total : undefined,
     });
   }
 
@@ -242,6 +251,7 @@ export class TradesService {
       marketTypeFilter: string | null;
       page: number;
       limit: number;
+      truncated?: number;
     },
   ) {
     const { sideFilter, exchangeFilter, marketTypeFilter, page, limit } = opts;
@@ -267,7 +277,7 @@ export class TradesService {
     const offset = (safePage - 1) * limit;
     const paginatedTrades = filtered.slice(offset, offset + limit);
 
-    return {
+    const result: any = {
       trades: paginatedTrades,
       stats,
       total,
@@ -276,6 +286,10 @@ export class TradesService {
       totalPages,
       exchanges,
     };
+    if (opts.truncated !== undefined) {
+      result.truncated = opts.truncated;
+    }
+    return result;
   }
 
   private emptyStats(): TradingStats {

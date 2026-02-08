@@ -79,6 +79,18 @@ export default function RootLayout({
   return (
     <html lang="pt" className={`${inter.variable} ${instrumentSerif.variable} ${spaceGrotesk.variable}`} suppressHydrationWarning>
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                var t = localStorage.getItem('theme');
+                var r = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                var v = t === 'system' || !t ? r : t;
+                document.documentElement.setAttribute('data-theme', v);
+              })();
+            `,
+          }}
+        />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="apple-touch-icon" href="/icons/icon-192x192.svg" />
         <meta name="apple-mobile-web-app-capable" content="yes" />

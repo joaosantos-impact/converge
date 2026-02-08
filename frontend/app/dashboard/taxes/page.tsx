@@ -26,12 +26,52 @@ import { useTrades } from '@/hooks/use-trades';
 import type { TradeData } from '@/lib/types';
 import { toast } from 'sonner';
 import { FadeIn } from '@/components/animations';
+import { AssetIcon } from '@/components/AssetIcon';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 // Dynamic import — jsPDF is ~300KB, only load when user exports
 const generateTaxReportPDF = async (...args: Parameters<typeof import('@/lib/pdf-export').generateTaxReportPDF>) => {
   const { generateTaxReportPDF: fn } = await import('@/lib/pdf-export');
   return fn(...args);
 };
+
+// ---------------------------------------------------------------------------
+// Fee to USD conversion (fees can be in USDT, BNB, base asset, etc.)
+// ---------------------------------------------------------------------------
+
+const STABLECOINS = new Set(['USDT', 'USDC', 'USD', 'BUSD', 'DAI', 'TUSD', 'FDUSD', 'USDP', 'FRAX', 'EUR']);
+
+function buildAssetPriceMap(trades: TradeData[]): Map<string, number> {
+  const m = new Map<string, number>();
+  const byTime = [...trades].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  );
+  for (const t of byTime) {
+    const parts = t.symbol.split('/');
+    const base = parts[0]?.toUpperCase();
+    const quote = parts[1]?.split(':')[0]?.toUpperCase();
+    if (base && quote && STABLECOINS.has(quote) && !m.has(base)) {
+      m.set(base, t.price);
+    }
+  }
+  return m;
+}
+
+function feeToUsd(trade: TradeData, priceMap: Map<string, number>): number {
+  const fee = trade.fee || 0;
+  if (fee <= 0) return 0;
+  const fc = (trade.feeCurrency || 'USDT').toUpperCase();
+  if (STABLECOINS.has(fc)) return fee;
+  const price = priceMap.get(fc);
+  if (price != null) return fee * price;
+  const [base, quote] = (trade.symbol || '').split('/');
+  const baseNorm = base?.toUpperCase();
+  const quoteNorm = quote?.split(':')[0]?.toUpperCase();
+  if (baseNorm === fc && quoteNorm && STABLECOINS.has(quoteNorm)) {
+    return fee * trade.price;
+  }
+  return 0;
+}
 
 // ---------------------------------------------------------------------------
 // FIFO lot tracking
@@ -93,6 +133,7 @@ interface AssetHolding {
  * 2. Per-sale event breakdown (for realized P&L with holding period)
  */
 function processFIFO(allTrades: TradeData[]) {
+  const priceMap = buildAssetPriceMap(allTrades);
   // Sort oldest first
   const chronological = [...allTrades].sort(
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
@@ -151,8 +192,8 @@ function processFIFO(allTrades: TradeData[]) {
       }
 
       const revenue = trade.cost;
-      const fee = trade.fee || 0;
-      const realizedPnL = revenue - totalCostBasis - fee;
+      const feeUsd = feeToUsd(trade, priceMap);
+      const realizedPnL = revenue - totalCostBasis - feeUsd;
 
       // Calculate tax-free vs taxable portions
       let taxFreePnL = 0;
@@ -176,7 +217,7 @@ function processFIFO(allTrades: TradeData[]) {
         baseAsset,
         amount: trade.amount,
         revenue,
-        fee,
+        fee: feeUsd,
         exchange: trade.exchange,
         costBasis: totalCostBasis,
         realizedPnL,
@@ -202,9 +243,15 @@ export default function TaxesPage() {
   const router = useRouter();
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
   const [exporting, setExporting] = useState(false);
+  const [salesPage, setSalesPage] = useState(1);
+  const [eligibilityPage, setEligibilityPage] = useState(1);
 
-  // Fetch ALL trades (days=0 means all-time) for complete FIFO tracking
-  const { data: tradesResponse, isLoading: tradesLoading } = useTrades(0, undefined, 10000, { page: 1 });
+  const SALES_PER_PAGE = 10;
+  const ELIGIBILITY_PER_PAGE = 10;
+
+  // Fetch ALL trades (days=0 means all-time) for complete FIFO tracking.
+  // Must request high limit — backend caps at 100k; 10k was truncating recent trades (2025).
+  const { data: tradesResponse, isLoading: tradesLoading } = useTrades(0, undefined, 100000, { page: 1 });
   const { data: portfolioData, isLoading: portfolioLoading } = usePortfolio({ perPage: 200 });
   const loading = tradesLoading || portfolioLoading;
   const allTrades = useMemo(() => tradesResponse?.trades || [], [tradesResponse]);
@@ -213,6 +260,11 @@ export default function TaxesPage() {
     if (isPending) return;
     if (!session) { router.push('/sign-in'); return; }
   }, [session, isPending, router]);
+
+  useEffect(() => {
+    setSalesPage(1);
+    setEligibilityPage(1);
+  }, [selectedYear]);
 
   // Available years from trades data
   const availableYears = useMemo(() => {
@@ -253,9 +305,10 @@ export default function TaxesPage() {
     const buysInYear = tradesInYear.filter(t => t.side === 'buy');
     const sellsInYear = tradesInYear.filter(t => t.side === 'sell');
 
+    const priceMap = buildAssetPriceMap(allTrades);
     const totalBuyVolumeInYear = buysInYear.reduce((s, t) => s + t.cost, 0);
     const totalSellVolumeInYear = sellsInYear.reduce((s, t) => s + t.cost, 0);
-    const totalFeesInYear = tradesInYear.reduce((s, t) => s + (t.fee || 0), 0);
+    const totalFeesInYear = tradesInYear.reduce((s, t) => s + feeToUsd(t, priceMap), 0);
 
     // Realized P&L breakdown
     const totalRealizedPnL = salesInYear.reduce((s, e) => s + e.realizedPnL, 0);
@@ -456,6 +509,16 @@ export default function TaxesPage() {
         </div>
       </FadeIn>
 
+      {tradesResponse?.truncated != null && (
+        <div className="p-4 border border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-400">
+          <p className="text-sm font-medium">Atenção: dados possivelmente incompletos</p>
+          <p className="text-xs mt-1 text-muted-foreground">
+            Tens mais de {tradesResponse.truncated.toLocaleString('pt-PT')} trades. O sistema carregou o máximo permitido.
+            O volume de vendas e P&L de 2025 podem estar subestimados. Sincroniza novamente para garantir que todos os trades foram importados.
+          </p>
+        </div>
+      )}
+
       {/* Two-column layout */}
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         {/* Left column */}
@@ -538,7 +601,34 @@ export default function TaxesPage() {
             <div className="p-4 border-b border-border">
               <div className="flex items-center justify-between">
                 <p className="font-medium text-sm">Vendas Realizadas em {selectedYear}</p>
-                <p className="text-xs text-muted-foreground">{salesInYear.length} vendas</p>
+                <div className="flex items-center gap-3">
+                  <p className="text-xs text-muted-foreground">{salesInYear.length} vendas</p>
+                  {salesInYear.length > SALES_PER_PAGE && (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={() => setSalesPage((p) => Math.max(1, p - 1))}
+                        disabled={salesPage <= 1}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </Button>
+                      <span className="text-xs text-muted-foreground min-w-[4rem] text-center">
+                        {salesPage} / {Math.ceil(salesInYear.length / SALES_PER_PAGE)}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        onClick={() => setSalesPage((p) => Math.min(Math.ceil(salesInYear.length / SALES_PER_PAGE), p + 1))}
+                        disabled={salesPage >= Math.ceil(salesInYear.length / SALES_PER_PAGE)}
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             {salesInYear.length === 0 ? (
@@ -561,16 +651,16 @@ export default function TaxesPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {salesInYear.map((sale, idx) => (
+                    {salesInYear
+                      .slice((salesPage - 1) * SALES_PER_PAGE, salesPage * SALES_PER_PAGE)
+                      .map((sale, idx) => (
                       <TableRow key={`${sale.symbol}-${sale.date.getTime()}-${idx}`} className="group">
                         <TableCell className="pl-4 text-xs text-muted-foreground whitespace-nowrap">
                           {sale.date.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' })}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 bg-muted flex items-center justify-center text-[9px] font-medium shrink-0">
-                              {sale.baseAsset.slice(0, 2)}
-                            </div>
+                            <AssetIcon symbol={sale.baseAsset} size={24} className="shrink-0 [&_img]:rounded-none" />
                             <span className="text-xs font-medium">{sale.symbol}</span>
                           </div>
                         </TableCell>
@@ -634,9 +724,7 @@ export default function TaxesPage() {
                         <TableRow key={h.asset}>
                           <TableCell className="pl-4">
                             <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 bg-muted flex items-center justify-center text-xs font-medium">
-                                {h.asset.slice(0, 2)}
-                              </div>
+                              <AssetIcon symbol={h.asset} size={32} className="shrink-0 [&_img]:rounded-none" />
                               <div>
                                 <span className="font-medium text-sm">{h.asset}</span>
                                 <p className="text-xs text-muted-foreground">{pctOfPortfolio.toFixed(0)}%</p>
@@ -669,18 +757,45 @@ export default function TaxesPage() {
           {/* Tax Status per Asset (holding period progress) */}
           <div className="border border-border bg-card">
             <div className="p-4 border-b border-border">
-              <p className="font-medium text-sm">Elegibilidade Fiscal</p>
+              <div className="flex items-center justify-between">
+                <p className="font-medium text-sm">Elegibilidade Fiscal</p>
+                {holdings.length > ELIGIBILITY_PER_PAGE && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={() => setEligibilityPage((p) => Math.max(1, p - 1))}
+                      disabled={eligibilityPage <= 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-xs text-muted-foreground min-w-[4rem] text-center">
+                      {eligibilityPage} / {Math.ceil(holdings.length / ELIGIBILITY_PER_PAGE)}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={() => setEligibilityPage((p) => Math.min(Math.ceil(holdings.length / ELIGIBILITY_PER_PAGE), p + 1))}
+                      disabled={eligibilityPage >= Math.ceil(holdings.length / ELIGIBILITY_PER_PAGE)}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
             {holdings.length === 0 ? (
               <div className="p-8 text-center">
                 <p className="text-sm text-muted-foreground">Sem holdings</p>
               </div>
             ) : (
-              holdings.map((h) => (
+              holdings
+                .slice((eligibilityPage - 1) * ELIGIBILITY_PER_PAGE, eligibilityPage * ELIGIBILITY_PER_PAGE)
+                .map((h) => (
                 <div key={h.asset} className="flex items-center gap-4 p-4 border-b border-border last:border-b-0">
-                  <div className="w-8 h-8 bg-muted flex items-center justify-center text-xs font-medium shrink-0">
-                    {h.asset.slice(0, 2)}
-                  </div>
+                  <AssetIcon symbol={h.asset} size={32} className="shrink-0 [&_img]:rounded-none" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm font-medium">{h.asset}</span>
