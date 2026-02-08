@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -169,7 +170,7 @@ export function AppSidebar() {
           }`}>
             <div className="w-6 h-6 bg-muted flex items-center justify-center text-[10px] font-medium shrink-0 rounded-sm overflow-hidden">
               {session?.user?.image ? (
-                <img src={session.user.image} alt="" className="w-full h-full object-cover" />
+                <Image src={session.user.image} alt="" width={24} height={24} className="w-full h-full object-cover" unoptimized />
               ) : (
                 userName.slice(0, 2).toUpperCase()
               )}

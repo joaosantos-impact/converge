@@ -250,11 +250,11 @@ export class SyncService {
       select: { timestamp: true },
     });
 
-    // First sync: fetch up to 5 years of trade history for comprehensive tax/FIFO tracking
+    // First sync: fetch up to 8 years of trade history for comprehensive tax/FIFO tracking
     // Incremental syncs: only fetch from last known trade
     const sinceTime = lastTrade
       ? lastTrade.timestamp.getTime() + 1
-      : Date.now() - 5 * 365 * 24 * 60 * 60 * 1000;
+      : Date.now() - 8 * 365 * 24 * 60 * 60 * 1000;
 
     // Include assets from: balances, previously traded, AND common assets
     // Common assets are ALWAYS included so we never miss sold-out positions (e.g. sold all ADA in March)

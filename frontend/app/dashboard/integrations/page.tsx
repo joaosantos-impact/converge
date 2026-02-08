@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { Suspense, useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -388,7 +388,7 @@ function IntegrationForm({ integration, onSuccess, onCancel }: { integration: In
 }
 
 /* ─── Main Page ─── */
-export default function IntegrationsPage() {
+function IntegrationsPageContent() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -595,5 +595,25 @@ export default function IntegrationsPage() {
         </Dialog>
       )}
     </div>
+  );
+}
+
+export default function IntegrationsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="space-y-6">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-10 w-64" />
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Skeleton key={i} className="h-20" />
+            ))}
+          </div>
+        </div>
+      }
+    >
+      <IntegrationsPageContent />
+    </Suspense>
   );
 }

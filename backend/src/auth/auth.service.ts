@@ -21,6 +21,15 @@ export class AuthService implements OnModuleInit {
         provider: 'postgresql',
       }),
       basePath: '/api/auth',
+      user: {
+        additionalFields: {
+          onboardingCompleted: {
+            type: 'boolean',
+            required: false,
+            defaultValue: false,
+          },
+        },
+      },
       emailAndPassword: {
         enabled: true,
       },

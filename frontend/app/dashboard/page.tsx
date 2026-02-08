@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -27,7 +27,7 @@ export default function DashboardPage() {
   const queryClient = useQueryClient();
   const { syncing, canSync, triggerSync } = useAutoSync();
   const [timeRange, setTimeRange] = useState<TimeRange>('30d');
-  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingJustCompleted, setOnboardingJustCompleted] = useState(false);
 
   // React Query — fetch ALL assets for dashboard calculations (top/worst)
   const { data: portfolio, isLoading: portfolioLoading } = usePortfolio({ perPage: 200 });
@@ -38,6 +38,15 @@ export default function DashboardPage() {
       const r = await fetch(`/api/portfolio/history?range=${timeRange}`);
       if (!r.ok) throw new Error('Failed');
       return r.json() as Promise<Array<{ timestamp: string; value: number }>>;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  const { data: currentUser } = useQuery({
+    queryKey: ['current-user'],
+    queryFn: async () => {
+      const r = await fetch('/api/user');
+      if (!r.ok) return null;
+      return r.json() as Promise<{ onboardingCompleted?: boolean }>;
     },
     staleTime: 5 * 60 * 1000,
   });
@@ -66,12 +75,12 @@ export default function DashboardPage() {
     };
   }, [portfolio, livePrices]);
 
-  // Show onboarding if no exchanges and not dismissed
-  useEffect(() => {
-    if (exchanges && exchanges.length === 0 && !localStorage.getItem('onboarding-dismissed')) {
-      setShowOnboarding(true);
-    }
-  }, [exchanges]);
+  const showOnboarding = !!(
+    exchanges &&
+    exchanges.length === 0 &&
+    !currentUser?.onboardingCompleted &&
+    !onboardingJustCompleted
+  );
 
   const handleSync = async () => {
     const { ok, error } = await triggerSync();
@@ -82,9 +91,10 @@ export default function DashboardPage() {
       toast.error(error || 'Erro ao sincronizar');
     }
   };
-  const handleOnboardingComplete = () => {
-    localStorage.setItem('onboarding-dismissed', 'true');
-    setShowOnboarding(false);
+  const handleOnboardingComplete = async () => {
+    await fetch('/api/user/onboarding-completed', { method: 'PATCH' });
+    setOnboardingJustCompleted(true);
+    queryClient.invalidateQueries({ queryKey: ['current-user'] });
     queryClient.invalidateQueries({ queryKey: ['exchange-accounts'] });
     queryClient.invalidateQueries({ queryKey: ['portfolio'] });
   };
