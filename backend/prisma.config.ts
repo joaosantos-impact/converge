@@ -30,6 +30,7 @@ function loadDatabaseUrl(): string {
 export default defineConfig({
   earlyAccess: true,
   schema: './prisma/schema.prisma',
+  migrations: { path: './prisma/migrations' },
   datasource: {
     url: loadDatabaseUrl(),
   },
