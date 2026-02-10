@@ -101,7 +101,7 @@ function HistoryPageContent() {
   useEffect(() => {
     const assetFromUrl = searchParams.get('asset');
     if (assetFromUrl) {
-      setFilterAsset(assetFromUrl);
+      queueMicrotask(() => setFilterAsset(assetFromUrl));
     }
   }, [searchParams]);
 

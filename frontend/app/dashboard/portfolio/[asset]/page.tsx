@@ -58,7 +58,7 @@ export default function AssetDetailPage() {
   const liveData = livePrices.get(asset);
   const livePrice = liveData?.price;
 
-  const trades = (tradesData?.trades || []) as TradeData[];
+  const trades = useMemo(() => (tradesData?.trades || []) as TradeData[], [tradesData?.trades]);
 
   const {
     totalAmount = 0,

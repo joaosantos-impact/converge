@@ -25,7 +25,7 @@ import { FadeIn } from '@/components/animations';
 
 export default function FeedPage() {
   const { data: session, isPending } = useSession();
-  const { formatValue, formatPrice } = useCurrency();
+  const { formatPrice } = useCurrency();
   const router = useRouter();
   const isMobile = useIsMobile();
   const [filter, setFilter] = useState<'all' | 'buys' | 'sells'>('all');

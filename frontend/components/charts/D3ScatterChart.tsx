@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import * as d3 from 'd3';
 
 export interface ScatterPoint {
@@ -35,7 +35,7 @@ export function D3ScatterChart({
   const svgRef = useRef<SVGSVGElement>(null);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; content: string } | null>(null);
 
-  const allPoints = series.flatMap((s) => s.data);
+  const allPoints = useMemo(() => series.flatMap((s) => s.data), [series]);
 
   useEffect(() => {
     if (!containerRef.current || !svgRef.current || allPoints.length === 0) return;
@@ -102,7 +102,7 @@ export function D3ScatterChart({
       .style('opacity', 0.3);
 
     g.selectAll('.domain, .tick line').remove();
-  }, [series, height, formatX, formatY, tooltipContent, allPoints.length]);
+  }, [series, height, formatX, formatY, tooltipContent, allPoints]);
 
   return (
     <div ref={containerRef} className="w-full relative">

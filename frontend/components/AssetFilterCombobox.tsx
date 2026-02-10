@@ -32,14 +32,16 @@ export function AssetFilterCombobox({
   const displayValue = value === 'all' ? '' : value;
   const inputValue = open ? search : displayValue;
 
-  useEffect(() => {
-    if (!open) setSearch('');
-  }, [open]);
+  const closeDropdown = () => {
+    setOpen(false);
+    setSearch('');
+  };
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setOpen(false);
+        setSearch('');
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -52,6 +54,7 @@ export function AssetFilterCombobox({
         role="combobox"
         aria-expanded={open}
         aria-haspopup="listbox"
+        aria-controls={open ? 'asset-listbox' : undefined}
         className="flex h-9 min-w-[165px] items-center gap-1.5 rounded-md border border-border bg-background px-3 py-2 text-sm shadow-xs transition-colors focus-within:ring-2 focus-within:ring-ring/50 focus-within:border-ring"
       >
         {value !== 'all' && (
@@ -69,7 +72,7 @@ export function AssetFilterCombobox({
         />
         <button
           type="button"
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => (open ? closeDropdown() : setOpen(true))}
           className="shrink-0 text-muted-foreground hover:text-foreground"
           aria-label={open ? 'Fechar' : 'Abrir'}
         >
@@ -78,15 +81,17 @@ export function AssetFilterCombobox({
       </div>
       {open && (
         <div
+          id="asset-listbox"
           role="listbox"
           className="absolute left-0 top-full z-50 mt-1 max-h-56 w-full min-w-[165px] overflow-y-auto rounded-md border border-border bg-popover py-1 shadow-md"
         >
           <button
             type="button"
             role="option"
+            aria-selected={value === 'all'}
             onClick={() => {
               onValueChange('all');
-              setOpen(false);
+              closeDropdown();
             }}
             className={cn(
               'flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground',
@@ -100,9 +105,10 @@ export function AssetFilterCombobox({
               key={asset}
               type="button"
               role="option"
+              aria-selected={value === asset}
               onClick={() => {
                 onValueChange(asset);
-                setOpen(false);
+                closeDropdown();
               }}
               className={cn(
                 'flex w-full cursor-pointer items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground',

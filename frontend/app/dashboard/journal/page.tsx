@@ -52,11 +52,7 @@ export default function JournalPage() {
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
-  // Today's label for display (set in useEffect to avoid hydration mismatch)
-  const [todayLabel, setTodayLabel] = useState('');
-  useEffect(() => {
-    setTodayLabel(new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' }));
-  }, []);
+  const todayLabel = new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' });
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {

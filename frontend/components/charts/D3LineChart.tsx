@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useId } from 'react';
+import { useEffect, useMemo, useRef, useId } from 'react';
 import * as d3 from 'd3';
 import { createD3Tooltip } from '@/lib/d3-tooltip';
 
@@ -54,7 +54,7 @@ export function D3LineChart({
   const gradientId = useId().replace(/:/g, '');
 
   const isMulti = Boolean(seriesKeys && seriesKeys.length > 0);
-  const keys = seriesKeys ?? ['value'];
+  const keys = useMemo(() => seriesKeys ?? ['value'], [seriesKeys]);
 
   useEffect(() => {
     if (!containerRef.current || !svgRef.current || !data.length) return;

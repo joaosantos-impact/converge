@@ -404,11 +404,13 @@ function IntegrationsPageContent() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
-    setPollFast(params.get('syncing') === '1');
-    setMounted(true);
+    queueMicrotask(() => {
+      setPollFast(params.get('syncing') === '1');
+      setMounted(true);
+    });
   }, []);
 
-  const { syncing } = useAutoSync({ pollFast });
+  useAutoSync({ pollFast });
 
   const { data: accountsData = [], error: accountsError } = useExchangeAccounts();
   const invalidateAccounts = useInvalidateExchangeAccounts();

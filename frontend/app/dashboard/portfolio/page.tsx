@@ -108,9 +108,9 @@ export default function PortfolioPage() {
   const [sharing, setSharing] = useState(false);
 
   const loading = portfolioLoading || sessionPending;
-  const allBalances = portfolioAll?.balances ?? [];
-  const rawAssets = portfolio?.balances ?? [];
   const assets = useMemo(() => {
+    const allBalances = portfolioAll?.balances ?? [];
+    const rawAssets = portfolio?.balances ?? [];
     const source = assetFilter === 'all' ? rawAssets : allBalances;
     let result = assetFilter === 'all' ? source : source.filter((b) =>
       assetFilter === 'crypto' ? !isFiat(b.asset) : isFiat(b.asset)
@@ -120,7 +120,7 @@ export default function PortfolioPage() {
       result = result.filter((b) => b.asset.toLowerCase().includes(q));
     }
     return result;
-  }, [rawAssets, allBalances, assetFilter, debouncedSearch]);
+  }, [portfolioAll?.balances, portfolio?.balances, assetFilter, debouncedSearch]);
 
   const pagination = useMemo(() => {
     if (assetFilter === 'all') {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, memo } from 'react';
+import { memo } from 'react';
 import { D3AreaChart } from './charts';
 
 interface PremiumChartProps {
@@ -46,20 +46,19 @@ export const PremiumChart = memo(function PremiumChart({
 }: PremiumChartProps) {
   const formatValue = formatValueProp ?? defaultYFormatter;
 
-  const formatDate = useMemo(() => {
+  function formatDate(ts: string): string {
     if (xAxisFormat === 'year') {
-      return (ts: string) => new Date(ts).getFullYear().toString();
+      return new Date(ts).getFullYear().toString();
     }
     if (timeRange === '24h') {
-      return (ts: string) => new Date(ts).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+      return new Date(ts).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
     }
-    return (ts: string) =>
-      new Date(ts).toLocaleDateString('pt-PT', {
-        day: '2-digit',
-        month: 'short',
-        ...(timeRange === '1y' || timeRange === 'all' ? { year: '2-digit' as const } : {}),
-      });
-  }, [timeRange, xAxisFormat]);
+    return new Date(ts).toLocaleDateString('pt-PT', {
+      day: '2-digit',
+      month: 'short',
+      ...(timeRange === '1y' || timeRange === 'all' ? { year: '2-digit' as const } : {}),
+    });
+  }
 
   if (!data || data.length === 0) {
     return (
