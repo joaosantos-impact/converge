@@ -27,8 +27,8 @@ export class AuthService implements OnModuleInit {
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       };
     }
-    const trustedOrigins = [baseURL, process.env.FRONTEND_URL].filter(Boolean);
-    const uniqueOrigins = [...new Set(trustedOrigins)];
+    const trustedOrigins = [baseURL, process.env.FRONTEND_URL].filter((x): x is string => Boolean(x));
+    const uniqueOrigins: string[] = [...new Set(trustedOrigins)];
 
     this.auth = betterAuth({
       appName: 'Converge',
