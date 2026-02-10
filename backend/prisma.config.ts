@@ -23,7 +23,8 @@ function loadDatabaseUrl(): string {
     }
   }
 
-  return process.env.DATABASE_URL || '';
+  // Fallback for prisma generate (no DB needed); migrate deploy requires real URL at runtime
+  return process.env.DATABASE_URL || 'postgresql://localhost:5432/dummy';
 }
 
 export default defineConfig({

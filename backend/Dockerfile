@@ -10,12 +10,13 @@ COPY package.json package-lock.json ./
 COPY backend/package.json backend/package.json
 COPY frontend/package.json frontend/package.json
 COPY backend/prisma ./backend/prisma/
+COPY backend/prisma.config.ts ./backend/
 
 # Install all dependencies (workspaces)
 RUN npm ci --ignore-scripts
 
-# Generate Prisma client
-RUN npx prisma generate --schema=backend/prisma/schema.prisma
+# Generate Prisma client (Prisma 7: URL from prisma.config.ts, not schema)
+RUN cd backend && npx prisma generate
 
 # Copy backend source
 COPY backend ./backend/
