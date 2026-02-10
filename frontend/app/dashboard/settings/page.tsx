@@ -213,10 +213,10 @@ export default function SettingsPage() {
         <section className="border border-border bg-card">
           <div className="flex flex-col sm:flex-row gap-6 p-6">
             {/* Left: avatar + image controls */}
-            <div className="flex flex-col items-center sm:items-start gap-3 shrink-0">
-              <div className="relative group">
-                <Avatar className="h-24 w-24 rounded-sm">
-                  <AvatarImage src={profileImageUrl || undefined} alt="" />
+            <div className="flex flex-col items-center sm:items-start shrink-0">
+              <div className="relative group size-24 shrink-0">
+                <Avatar className="size-full rounded-sm [&>img]:object-cover">
+                  <AvatarImage src={profileImageUrl || undefined} alt="" referrerPolicy="no-referrer" />
                   <AvatarFallback className="rounded-sm text-lg font-medium bg-muted">
                     {(profileName || session?.user?.email || '?').slice(0, 2).toUpperCase()}
                   </AvatarFallback>
@@ -236,15 +236,6 @@ export default function SettingsPage() {
                 >
                   <Camera className="h-6 w-6 text-white" />
                 </button>
-              </div>
-              <div className="w-full sm:w-48 space-y-2">
-                <Label className="text-xs text-muted-foreground">URL da imagem</Label>
-                <Input
-                  placeholder="https://..."
-                  value={profileImageUrl}
-                  onChange={(e) => setProfileImageUrl(e.target.value)}
-                  className="text-sm h-8"
-                />
               </div>
             </div>
 

@@ -87,7 +87,7 @@ export function Breadcrumbs() {
   if (!crumbs) return null;
 
   return (
-    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs text-muted-foreground mb-4">
+    <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground mb-4 min-w-0">
       {/* Section label — not a link, just context */}
       <span className="text-muted-foreground/60">{crumbs.sectionLabel}</span>
 

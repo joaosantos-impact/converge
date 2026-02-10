@@ -488,52 +488,54 @@ export default function TaxesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0">
       {/* Header */}
       <FadeIn>
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center sm:justify-between gap-4">
+          <div className="min-w-0">
             <h1 className="text-xl font-medium tracking-tight">Impostos</h1>
             <p className="text-sm text-muted-foreground">Relatório fiscal {selectedYear}</p>
           </div>
-          <div className="flex items-center gap-2 h-9">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <Select value={selectedYear} onValueChange={setSelectedYear}>
-              <SelectTrigger className="w-24 h-9">
-                <SelectValue />
-              </SelectTrigger>
+              <SelectTrigger className="min-w-[100px] h-9">
+                <SelectValue placeholder="Ano fiscal" />
+                </SelectTrigger>
               <SelectContent>
                 {availableYears.map(y => (
                   <SelectItem key={y} value={y.toString()}>{y}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            <div className="flex gap-2">
             <Button onClick={exportCSV} disabled={exporting} variant="outline" className="h-9" aria-label="Exportar relatório CSV">
               CSV
             </Button>
             <Button onClick={exportPDF} disabled={exporting} className="h-9" aria-label="Exportar relatório PDF">
               PDF
             </Button>
+            </div>
           </div>
         </div>
       </FadeIn>
 
       {tradesResponse?.truncated != null && (
-        <div className="p-4 border border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-400">
+        <div className="p-4 border border-amber-500/30 bg-amber-500/5 text-amber-700 dark:text-amber-400 min-w-0 overflow-hidden">
           <p className="text-sm font-medium">Atenção: dados possivelmente incompletos</p>
-          <p className="text-xs mt-1 text-muted-foreground">
+          <p className="text-xs mt-1 text-muted-foreground break-words">
             Tens mais de {tradesResponse.truncated.toLocaleString('pt-PT')} trades. O sistema carregou o máximo permitido.
             O volume de vendas e P&L de 2025 podem estar subestimados. Sincroniza novamente para garantir que todos os trades foram importados.
           </p>
         </div>
       )}
 
-      {/* Two-column layout */}
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+      {/* Two-column layout — sidebar stacks below on mobile */}
+      <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:items-start min-w-0">
         {/* Left column */}
-        <div className="space-y-6">
+        <div className="space-y-6 min-w-0">
           {/* Portugal tax regime */}
           <div className="p-4 border border-border bg-card">
-            <div className="flex items-stretch gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-stretch gap-4">
               <div className="w-1 bg-foreground shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
@@ -554,7 +556,7 @@ export default function TaxesPage() {
                   isentas de imposto sobre mais-valias (<span className="text-foreground font-medium">CIRS {PT_TAX_LAW.article}</span>). Vendas com detenção inferior são tributadas a <span className="text-foreground font-medium">28%</span>.
                   O método <span className="text-foreground font-medium">FIFO</span> é utilizado para determinar a detenção de cada venda.
                 </p>
-                <p className="text-[11px] text-muted-foreground/80 mt-1.5">
+                <p className="text-[11px] text-muted-foreground/80 mt-1.5 break-words">
                   {PT_TAX_LAW.label} — {PT_TAX_LAW.article} (isenção de mais-valias em criptoactivos detidos ≥365 dias). Mesmo isentas, as vendas devem ser declaradas no IRS (Anexo G1).
                 </p>
               </div>
@@ -569,62 +571,62 @@ export default function TaxesPage() {
                 1 Jan a 31 Dez {selectedYear}
               </p>
             </div>
-            <div className="p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm">P&L Realizado (total)</span>
-                <span className={`font-medium ${totalRealizedPnL >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+            <div className="p-4 space-y-4 min-w-0">
+              <div className="flex items-center justify-between gap-3 min-w-0">
+                <span className="text-sm shrink-0">P&L Realizado (total)</span>
+                <span className={`font-medium shrink-0 text-right ${totalRealizedPnL >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                   {totalRealizedPnL >= 0 ? '+' : ''}{formatValue(totalRealizedPnL)}
                 </span>
               </div>
               <div className="h-px bg-border" />
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 bg-emerald-500 rounded-full" />
-                  <span className="text-sm">P&L Isento (&gt;365 dias)</span>
+              <div className="flex items-center justify-between gap-3 min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-2 h-2 bg-emerald-500 rounded-full shrink-0" />
+                  <span className="text-sm truncate">P&L Isento (&gt;365 dias)</span>
                 </div>
-                <span className="font-medium text-emerald-500">
+                <span className="font-medium text-emerald-500 shrink-0 text-right">
                   {taxFreeRealizedPnL >= 0 ? '+' : ''}{formatValue(taxFreeRealizedPnL)}
                 </span>
               </div>
               <div className="h-px bg-border" />
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: '#f59e0b' }} />
-                  <span className="text-sm">P&L Tributável (&lt;365 dias)</span>
+              <div className="flex items-center justify-between gap-3 min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: '#f59e0b' }} />
+                  <span className="text-sm truncate">P&L Tributável (&lt;365 dias)</span>
                 </div>
-                <span className="font-medium" style={{ color: '#f59e0b' }}>
+                <span className="font-medium shrink-0 text-right" style={{ color: '#f59e0b' }}>
                   {taxableRealizedPnL >= 0 ? '+' : ''}{formatValue(taxableRealizedPnL)}
                 </span>
               </div>
               <div className="h-px bg-border" />
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Volume compras</span>
-                <span className="text-sm text-muted-foreground">{formatValue(totalBuyVolumeInYear)}</span>
+              <div className="flex items-center justify-between gap-3 min-w-0">
+                <span className="text-sm shrink-0">Volume compras</span>
+                <span className="text-sm text-muted-foreground shrink-0 text-right">{formatValue(totalBuyVolumeInYear)}</span>
               </div>
               <div className="h-px bg-border" />
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Volume vendas</span>
-                <span className="text-sm text-muted-foreground">{formatValue(totalSellVolumeInYear)}</span>
+              <div className="flex items-center justify-between gap-3 min-w-0">
+                <span className="text-sm shrink-0">Volume vendas</span>
+                <span className="text-sm text-muted-foreground shrink-0 text-right">{formatValue(totalSellVolumeInYear)}</span>
               </div>
               <div className="h-px bg-border" />
-              <div className="flex items-center justify-between">
-                <span className="text-sm">Taxas & comissões</span>
-                <span className="text-sm text-muted-foreground">{formatValue(totalFeesInYear)}</span>
+              <div className="flex items-center justify-between gap-3 min-w-0">
+                <span className="text-sm shrink-0">Taxas & comissões</span>
+                <span className="text-sm text-muted-foreground shrink-0 text-right">{formatValue(totalFeesInYear)}</span>
               </div>
               <div className="h-px bg-border" />
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Imposto estimado (28%)</span>
-                <span className="font-medium text-red-500">{formatValue(potentialTax)}</span>
+              <div className="flex items-center justify-between gap-3 min-w-0">
+                <span className="text-sm font-medium shrink-0">Imposto estimado (28%)</span>
+                <span className="font-medium text-red-500 shrink-0 text-right">{formatValue(potentialTax)}</span>
               </div>
             </div>
           </div>
 
           {/* Realized Sales Detail (FIFO) */}
-          <div className="border border-border bg-card">
+          <div className="border border-border bg-card min-w-0">
             <div className="p-4 border-b border-border">
-              <div className="flex items-center justify-between">
-                <p className="font-medium text-sm">Vendas Realizadas em {selectedYear}</p>
-                <div className="flex items-center gap-3">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <p className="font-medium text-sm min-w-0">Vendas Realizadas em {selectedYear}</p>
+                <div className="flex items-center gap-3 shrink-0">
                   <p className="text-xs text-muted-foreground">{salesInYear.length} vendas</p>
                   {salesInYear.length > SALES_PER_PAGE && (
                     <div className="flex items-center gap-1">
@@ -659,8 +661,8 @@ export default function TaxesPage() {
                 <p className="text-sm text-muted-foreground">Sem vendas em {selectedYear}</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
+              <div className="overflow-x-auto min-w-0">
+                <Table className="min-w-[640px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
                       <TableHead className="pl-4">Data</TableHead>
@@ -720,7 +722,7 @@ export default function TaxesPage() {
           </div>
 
           {/* Holdings with ROI */}
-          <div className="border border-border bg-card">
+          <div className="border border-border bg-card min-w-0">
             <div className="p-4 border-b border-border">
               <p className="font-medium text-sm">Holdings Atuais</p>
             </div>
@@ -729,8 +731,8 @@ export default function TaxesPage() {
                 <p className="text-sm text-muted-foreground">Sem holdings. Sincroniza as tuas exchanges.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <Table>
+              <div className="overflow-x-auto min-w-0">
+                <Table className="min-w-[480px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
                       <TableHead className="pl-4">Coin</TableHead>
@@ -778,17 +780,17 @@ export default function TaxesPage() {
           </div>
 
           {/* Tax Status per Asset (holding period progress) */}
-          <div className="border border-border bg-card">
+          <div className="border border-border bg-card min-w-0">
             <div className="p-4 border-b border-border">
-              <div className="flex items-center justify-between">
-                <div>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="min-w-0">
                   <p className="font-medium text-sm">Elegibilidade Fiscal</p>
                   <p className="text-[10px] text-muted-foreground mt-0.5">
                     Cada compra conta. A mais antiga determina a isenção (FIFO).
                   </p>
                 </div>
                 {holdings.length > ELIGIBILITY_PER_PAGE && (
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1 shrink-0">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -854,7 +856,7 @@ export default function TaxesPage() {
         </div>
 
         {/* Right column (sidebar) */}
-        <div className="space-y-6">
+        <div className="space-y-6 min-w-0">
           {/* Portfolio Overview */}
           <div className="border border-border bg-card p-4">
             <p className="text-xs text-muted-foreground uppercase tracking-wider">Portfolio Atual</p>
@@ -963,7 +965,7 @@ export default function TaxesPage() {
           </div>
 
           {/* Notes */}
-          <div className="p-4 bg-muted text-xs text-muted-foreground space-y-2">
+          <div className="p-4 bg-muted text-xs text-muted-foreground space-y-2 break-words min-w-0">
             <p>-- Cada venda é cruzada com as compras mais antigas (FIFO)</p>
             <p>-- Se todas as compras usadas tiverem &gt;365 dias, o ganho é isento</p>
             <p>-- Vendas parcialmente isentas mostram a divisão</p>

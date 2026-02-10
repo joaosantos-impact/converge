@@ -126,7 +126,7 @@ export default function SharePage() {
         <div className="flex items-center gap-4 mb-10">
           <div className="w-14 h-14 bg-white/10 flex items-center justify-center text-lg font-medium">
             {data.user.image ? (
-              <Image src={data.user.image} alt="" width={56} height={56} className="w-full h-full object-cover" />
+              <Image src={data.user.image} alt="" width={56} height={56} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
             ) : (
               data.user.name.slice(0, 2).toUpperCase()
             )}

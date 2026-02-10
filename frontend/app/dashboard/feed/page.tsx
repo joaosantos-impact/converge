@@ -297,7 +297,7 @@ export default function FeedPage() {
               {/* Post header */}
               <div className="flex items-center gap-3 p-4">
                 <Avatar className="h-10 w-10">
-                  <AvatarImage src={post.user?.image || undefined} />
+                  <AvatarImage src={post.user?.image || undefined} referrerPolicy="no-referrer" />
                   <AvatarFallback className="bg-muted text-xs">{post.user?.name?.slice(0, 2).toUpperCase() || '??'}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1">

@@ -31,6 +31,12 @@ export class AuthService implements OnModuleInit {
       }),
       basePath: '/api/auth',
       socialProviders: Object.keys(socialProviders).length > 0 ? socialProviders : undefined,
+      account: {
+        accountLinking: {
+          enabled: true,
+          trustedProviders: ['google'],
+        },
+      },
       user: {
         additionalFields: {
           onboardingCompleted: {

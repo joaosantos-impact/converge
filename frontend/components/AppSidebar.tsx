@@ -16,6 +16,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import {
   AlertDialog,
@@ -66,9 +67,14 @@ export function AppSidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { data: session } = useSession();
+  const { isMobile, setOpenMobile } = useSidebar();
   const [logoutOpen, setLogoutOpen] = useState(false);
 
   const userName = session?.user?.name || session?.user?.email?.split('@')[0] || 'Conta';
+
+  const closeSidebarIfMobile = () => {
+    if (isMobile) setOpenMobile(false);
+  };
 
   const handleLogout = async () => {
     setLogoutOpen(false);
@@ -88,7 +94,7 @@ export function AppSidebar() {
               isActive={isActive}
               className="h-10 px-3 transition-colors hover:bg-sidebar-accent data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium"
             >
-              <Link href={item.href} aria-current={isActive ? 'page' : undefined}>
+              <Link href={item.href} onClick={closeSidebarIfMobile} aria-current={isActive ? 'page' : undefined}>
                 <item.icon className="h-4 w-4 shrink-0" />
                 <span className="text-sm">{item.title}</span>
               </Link>
@@ -104,7 +110,7 @@ export function AppSidebar() {
   return (
     <Sidebar className="border-r-0">
       <SidebarHeader className="px-3 py-3">
-        <Link href="/dashboard/portfolio" className="flex items-center gap-2.5">
+        <Link href="/dashboard/portfolio" onClick={closeSidebarIfMobile} className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 items-center justify-center bg-foreground shrink-0">
             <span className="text-xs font-bold text-background">C</span>
           </div>
@@ -143,7 +149,10 @@ export function AppSidebar() {
 
       <SidebarFooter className="p-2.5 space-y-0.5">
         <button
-          onClick={() => setLogoutOpen(true)}
+          onClick={() => {
+            closeSidebarIfMobile();
+            setLogoutOpen(true);
+          }}
           className="flex items-center gap-2.5 w-full px-2.5 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50 transition-colors cursor-pointer"
           aria-label="Terminar sessão"
         >
@@ -153,13 +162,13 @@ export function AppSidebar() {
 
         <SidebarSeparator />
 
-        <Link href="/dashboard/settings">
+        <Link href="/dashboard/settings" onClick={closeSidebarIfMobile}>
           <div className={`flex items-center gap-2.5 px-2.5 py-2 transition-colors cursor-pointer ${
             settingsActive ? 'bg-sidebar-accent' : 'hover:bg-sidebar-accent/50'
           }`}>
             <div className="w-8 h-8 bg-muted flex items-center justify-center text-xs font-medium shrink-0 rounded-sm overflow-hidden">
               {session?.user?.image ? (
-                <Image src={session.user.image} alt="" width={32} height={32} className="w-full h-full object-cover" unoptimized />
+                <Image src={session.user.image} alt="" width={32} height={32} className="w-full h-full object-cover" unoptimized referrerPolicy="no-referrer" />
               ) : (
                 userName.slice(0, 2).toUpperCase()
               )}

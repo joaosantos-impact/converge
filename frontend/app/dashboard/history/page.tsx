@@ -243,14 +243,14 @@ function HistoryPageContent() {
     <div className="space-y-3 relative">
       {/* Header — date/period top right like Portfolio/Taxes */}
       <FadeIn>
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
             <h1 className="text-xl font-medium tracking-tight">Trades</h1>
             {fetching && (
               <div className="w-4 h-4 border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin" />
             )}
           </div>
-          <div className="flex items-center gap-2 h-9">
+          <div className="flex flex-wrap items-center gap-2 h-9">
             <Select
               value={selectedYear === 'all' ? 'all' : String(selectedYear)}
               onValueChange={(v) => setSelectedYear(v === 'all' ? 'all' : parseInt(v, 10))}
@@ -276,38 +276,38 @@ function HistoryPageContent() {
       <FadeIn delay={0.03}>
         <div className="flex flex-wrap items-center gap-2">
           <AssetFilterCombobox
-              value={filterAsset}
-              onValueChange={setFilterAsset}
-              options={availableAssets}
-              placeholder="Todos os assets"
-            />
-            <Select value={filterType} onValueChange={(v) => setFilterType(v as 'all' | 'buy' | 'sell')}>
-              <SelectTrigger className="min-w-[100px] h-9"><SelectValue /></SelectTrigger>
+            value={filterAsset}
+            onValueChange={setFilterAsset}
+            options={availableAssets}
+            placeholder="Asset: Todos"
+          />
+          <Select value={filterType} onValueChange={(v) => setFilterType(v as 'all' | 'buy' | 'sell')}>
+            <SelectTrigger className="min-w-[140px] h-9"><SelectValue placeholder="Tipo de operação" /></SelectTrigger>
+            <SelectContent className="!max-h-56 overflow-y-auto">
+              <SelectItem value="all">Tipo: Todas</SelectItem>
+              <SelectItem value="buy">Tipo: Compras</SelectItem>
+              <SelectItem value="sell">Tipo: Vendas</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filterMarketType} onValueChange={(v) => setFilterMarketType(v as 'all' | 'spot' | 'future')}>
+            <SelectTrigger className="min-w-[160px] h-9 [&_[data-slot=select-value]]:line-clamp-none"><SelectValue placeholder="Tipo de mercado" /></SelectTrigger>
+            <SelectContent className="!max-h-56 overflow-y-auto">
+              <SelectItem value="all">Mercado: Spot + Futuros</SelectItem>
+              <SelectItem value="spot">Mercado: Spot</SelectItem>
+              <SelectItem value="future">Mercado: Futuros</SelectItem>
+            </SelectContent>
+          </Select>
+          {exchanges.length > 0 && (
+            <Select value={filterExchange} onValueChange={setFilterExchange}>
+              <SelectTrigger className="min-w-[130px] h-9"><SelectValue placeholder="Exchange" /></SelectTrigger>
               <SelectContent className="!max-h-56 overflow-y-auto">
-                <SelectItem value="all">Todas</SelectItem>
-                <SelectItem value="buy">Compras</SelectItem>
-                <SelectItem value="sell">Vendas</SelectItem>
+                <SelectItem value="all">Exchange: Todas</SelectItem>
+                {exchanges.map((ex) => (
+                  <SelectItem key={ex} value={ex}>{ex}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            <Select value={filterMarketType} onValueChange={(v) => setFilterMarketType(v as 'all' | 'spot' | 'future')}>
-              <SelectTrigger className="min-w-[145px] h-9 [&_[data-slot=select-value]]:line-clamp-none"><SelectValue /></SelectTrigger>
-              <SelectContent className="!max-h-56 overflow-y-auto">
-                <SelectItem value="all">Spot + Futuros</SelectItem>
-                <SelectItem value="spot">Spot</SelectItem>
-                <SelectItem value="future">Futuros</SelectItem>
-              </SelectContent>
-            </Select>
-            {exchanges.length > 0 && (
-              <Select value={filterExchange} onValueChange={setFilterExchange}>
-                <SelectTrigger className="min-w-[110px] h-9"><SelectValue /></SelectTrigger>
-                <SelectContent className="!max-h-56 overflow-y-auto">
-                  <SelectItem value="all">Todas</SelectItem>
-                  {exchanges.map((ex) => (
-                    <SelectItem key={ex} value={ex}>{ex}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
+          )}
         </div>
       </FadeIn>
 
@@ -324,9 +324,9 @@ function HistoryPageContent() {
             {groupedTrades.map((group) => (
               <div key={group.date}>
                 <p className="text-[10px] font-medium text-muted-foreground mb-2 capitalize">{group.date}</p>
-                <div className="border border-border overflow-x-auto">
-                  {/* Header — explica cada coluna */}
-                  <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 px-3 py-2 border-b border-border bg-muted/30 text-[10px] text-muted-foreground">
+                <div className="border border-border overflow-x-auto min-w-0">
+                  {/* Header — min 520px so columns don't squash on small screens */}
+                  <div className="grid grid-cols-[minmax(140px,1fr)_minmax(3rem,auto)_minmax(4rem,auto)_minmax(3.5rem,auto)_minmax(3rem,auto)] gap-2 sm:gap-3 px-2 sm:px-3 py-2 border-b border-border bg-muted/30 text-[10px] text-muted-foreground min-w-[520px]">
                     <span className="font-medium">Par · hora</span>
                     <span className="text-right min-w-[3rem] font-medium" title="Quantidade comprada ou vendida">Qtd</span>
                     <span className="text-right min-w-[4.5rem] font-medium" title="Preço por unidade">Preço</span>
@@ -335,7 +335,7 @@ function HistoryPageContent() {
                   </div>
                   <div className="divide-y divide-border">
                     {group.trades.map((trade, i) => (
-                      <div key={trade.id || i} className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-center p-3 bg-card hover:bg-muted/50 transition-colors">
+                      <div key={trade.id || i} className="grid grid-cols-[minmax(140px,1fr)_minmax(3rem,auto)_minmax(4rem,auto)_minmax(3.5rem,auto)_minmax(3rem,auto)] gap-2 sm:gap-3 items-center p-2 sm:p-3 bg-card hover:bg-muted/50 transition-colors min-w-[520px]">
                         <div className="flex items-center gap-2 min-w-0">
                           <div className="w-0.5 shrink-0 bg-foreground self-stretch min-h-8" />
                           <AssetIcon symbol={trade.symbol.split('/')[0]?.split(':')[0] || trade.symbol.split('/')[0] || trade.symbol} size={20} className="shrink-0" />
@@ -388,11 +388,11 @@ function HistoryPageContent() {
           {/* Pagination */}
           {totalPages > 1 && (
             <FadeIn delay={0.2}>
-              <div className="flex items-center justify-between pt-2">
-                <p className="text-xs text-muted-foreground">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
+                <p className="text-xs text-muted-foreground shrink-0">
                   {((page - 1) * PER_PAGE) + 1}–{Math.min(page * PER_PAGE, totalTrades)} de {totalTrades}
                 </p>
-                <div className="flex items-center gap-1">
+                <div className="flex flex-wrap items-center gap-1">
                   <Button
                     variant="outline"
                     size="sm"
@@ -453,7 +453,7 @@ function HistoryPageContent() {
             </FadeIn>
           )}
           </div>
-          {/* Stats column — aligned with first trade (offset = date line height) */}
+          {/* Stats column — horizontal on mobile, vertical on lg */}
           <div className="flex flex-wrap gap-3 lg:flex-col lg:flex-nowrap lg:gap-3 pt-5.5">
             <div className="border border-border bg-card px-4 py-3 min-w-[140px] lg:min-w-0 shrink-0">
               <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Total</p>

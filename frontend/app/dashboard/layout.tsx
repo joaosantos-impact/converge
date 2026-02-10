@@ -33,14 +33,14 @@ export default function DashboardLayout({
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset className="bg-background">
-        <header className="flex h-14 items-center gap-4 px-8">
+        <header className="flex h-14 items-center gap-2 sm:gap-4 px-4 sm:px-6 lg:px-8">
           <SidebarTrigger className="-ml-2 hover:bg-muted" />
           <div className="flex-1" />
           <SyncIndicator />
           <CurrencySelector />
           <ThemeToggle />
         </header>
-        <main className="flex-1 overflow-auto px-8 pb-8">
+        <main className="flex-1 overflow-auto px-4 sm:px-6 lg:px-8 pb-8">
           <Breadcrumbs />
           <ErrorBoundary>
             {children}

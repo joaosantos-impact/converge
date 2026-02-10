@@ -275,11 +275,11 @@ export default function PortfolioPage() {
     <div className="space-y-6 relative">
       <FadeIn>
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
+          <div className="min-w-0">
             <h1 className="text-xl font-medium tracking-tight">Portfolio</h1>
             <p className="text-sm text-muted-foreground">Todos os teus assets agregados</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex gap-1 p-0.5 bg-muted rounded-none">
               <button
                 type="button"
@@ -315,17 +315,17 @@ export default function PortfolioPage() {
       </FadeIn>
 
       <FadeIn delay={0.03}>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-4">
           {viewMode === 'list' && (
-            <div className="relative max-w-sm flex-1 min-w-[200px]">
+            <div className="relative w-full sm:max-w-sm flex-1 min-w-0">
               <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-              <Input placeholder="Procurar asset..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
+              <Input placeholder="Procurar asset (ex: BTC, ETH...)" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
             </div>
           )}
           <div className="flex gap-1 p-0.5 bg-muted rounded-none">
-            <button type="button" onClick={() => setAssetFilter('all')} aria-pressed={assetFilter === 'all'} className={`px-2.5 py-1.5 text-xs font-medium rounded-none transition-colors ${assetFilter === 'all' ? 'bg-background text-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>Todos</button>
-            <button type="button" onClick={() => setAssetFilter('crypto')} aria-pressed={assetFilter === 'crypto'} className={`px-2.5 py-1.5 text-xs font-medium rounded-none transition-colors ${assetFilter === 'crypto' ? 'bg-background text-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>Cripto</button>
-            <button type="button" onClick={() => setAssetFilter('fiat')} aria-pressed={assetFilter === 'fiat'} className={`px-2.5 py-1.5 text-xs font-medium rounded-none transition-colors ${assetFilter === 'fiat' ? 'bg-background text-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>Fiat</button>
+            <button type="button" onClick={() => setAssetFilter('all')} aria-pressed={assetFilter === 'all'} className={`px-2.5 py-1.5 text-xs font-medium rounded-none transition-colors ${assetFilter === 'all' ? 'bg-background text-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>Todos os assets</button>
+            <button type="button" onClick={() => setAssetFilter('crypto')} aria-pressed={assetFilter === 'crypto'} className={`px-2.5 py-1.5 text-xs font-medium rounded-none transition-colors ${assetFilter === 'crypto' ? 'bg-background text-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>Só cripto</button>
+            <button type="button" onClick={() => setAssetFilter('fiat')} aria-pressed={assetFilter === 'fiat'} className={`px-2.5 py-1.5 text-xs font-medium rounded-none transition-colors ${assetFilter === 'fiat' ? 'bg-background text-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>Só fiat</button>
           </div>
         </div>
       </FadeIn>
@@ -482,7 +482,7 @@ export default function PortfolioPage() {
                 </TableBody>
               </Table>
               {pagination.totalPages > 1 && (
-                <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 border-t border-border">
                   <p className="text-xs text-muted-foreground">
                     {(pagination.page - 1) * pagination.perPage + 1}–{Math.min(pagination.page * pagination.perPage, pagination.total)} de {pagination.total} assets
                   </p>

@@ -171,7 +171,7 @@ export default function LeaderboardPage() {
                 )}
               </div>
               <Avatar className="h-10 w-10">
-                <AvatarImage src={user.image} />
+                <AvatarImage src={user.image} referrerPolicy="no-referrer" />
                 <AvatarFallback className="bg-muted text-xs">{user.displayName.slice(0, 2).toUpperCase()}</AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">

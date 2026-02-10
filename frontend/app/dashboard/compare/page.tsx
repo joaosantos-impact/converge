@@ -156,53 +156,56 @@ export default function ComparePage() {
 
       {/* Controls */}
       <FadeIn delay={0.05}>
-        <div className="flex flex-wrap items-center gap-3">
-          <Select value={assetA} onValueChange={setAssetA}>
-            <SelectTrigger className="w-40 h-10">
-              <SelectValue />
-            </SelectTrigger>
+        <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-4">
+          <div className="flex flex-wrap items-center gap-4 min-w-0">
+            <Select value={assetA} onValueChange={setAssetA}>
+              <SelectTrigger className="w-full sm:w-44 h-10 min-w-0">
+                <SelectValue placeholder="Primeiro asset" />
+              </SelectTrigger>
             <SelectContent>
               {ASSETS.map(a => (
                 <SelectItem key={a.id} value={a.id} disabled={a.id === assetB}>{a.id} — {a.name}</SelectItem>
               ))}
             </SelectContent>
-          </Select>
+            </Select>
 
           <span className="text-sm text-muted-foreground font-medium">vs</span>
 
-          <Select value={assetB} onValueChange={setAssetB}>
-            <SelectTrigger className="w-40 h-10">
-              <SelectValue />
-            </SelectTrigger>
+            <Select value={assetB} onValueChange={setAssetB}>
+              <SelectTrigger className="w-full sm:w-44 h-10 min-w-0">
+                <SelectValue placeholder="Segundo asset" />
+              </SelectTrigger>
             <SelectContent>
               {ASSETS.map(a => (
                 <SelectItem key={a.id} value={a.id} disabled={a.id === assetA}>{a.id} — {a.name}</SelectItem>
               ))}
             </SelectContent>
-          </Select>
-
-          <div className="flex gap-1 ml-auto">
-            {(Object.keys(PERIODS) as Period[]).map(p => (
-              <button
-                key={p}
-                onClick={() => setPeriod(p)}
-                aria-pressed={period === p}
-                aria-label={`Período ${PERIODS[p].label}`}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                  period === p ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {PERIODS[p].label}
-              </button>
-            ))}
+            </Select>
+          </div>
+          <div className="overflow-x-auto -mx-1 sm:mx-0 sm:ml-auto">
+            <div className="flex gap-1 min-w-max sm:min-w-0 pb-1 sm:pb-0">
+              {(Object.keys(PERIODS) as Period[]).map(p => (
+                <button
+                  key={p}
+                  onClick={() => setPeriod(p)}
+                  aria-pressed={period === p}
+                  aria-label={`Período ${PERIODS[p].label}`}
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors shrink-0 ${
+                    period === p ? 'bg-foreground text-background' : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  {PERIODS[p].label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </FadeIn>
 
       {/* Stats */}
       <FadeIn delay={0.1}>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="border border-border bg-card p-5">
+        <div className="grid grid-cols-2 gap-3 min-w-0">
+          <div className="border border-border bg-card p-4 sm:p-5 min-w-0 overflow-hidden">
             <div className="flex items-center gap-3 mb-3">
               <AssetIcon symbol={assetA} size={40} />
               <div>
@@ -216,7 +219,7 @@ export default function ComparePage() {
             <p className="text-xs text-muted-foreground mt-1">{PERIODS[period].label}</p>
           </div>
 
-          <div className="border border-border bg-card p-5">
+          <div className="border border-border bg-card p-4 sm:p-5 min-w-0 overflow-hidden">
             <div className="flex items-center gap-3 mb-3">
               <AssetIcon symbol={assetB} size={40} />
               <div>

@@ -198,11 +198,11 @@ export default function AnalyticsPage() {
             value={selectedYear === 'all' ? 'all' : String(selectedYear)}
             onValueChange={(v) => setSelectedYear(v === 'all' ? 'all' : parseInt(v, 10))}
           >
-            <SelectTrigger className="min-w-[120px] h-9 [&_[data-slot=select-value]]:line-clamp-none">
-              <SelectValue placeholder="Ano" />
-            </SelectTrigger>
+            <SelectTrigger className="min-w-[160px] h-9 [&_[data-slot=select-value]]:line-clamp-none">
+              <SelectValue placeholder="Ano: Selecionar" />
+              </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">Todos os anos</SelectItem>
+              <SelectItem value="all">Ano: Todos os anos</SelectItem>
               {getAvailableYears().map((y) => (
                 <SelectItem key={y} value={String(y)}>{y}</SelectItem>
               ))}
