@@ -63,15 +63,8 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  async rewrites() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${apiUrl}/api/:path*`,
-      },
-    ];
-  },
+  // API proxy is handled by app/api/[[...path]]/route.ts (runtime, reads env at request time)
+  // Rewrites removed - they were build-time and NEXT_PUBLIC_API_URL wasn't available in Docker build
 };
 
 export default nextConfig;
