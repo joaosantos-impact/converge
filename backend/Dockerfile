@@ -29,9 +29,10 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-# Copy backend runtime: dist, prisma schema, package.json
+# Copy backend runtime: dist, prisma schema, config, package.json
 COPY --from=builder /app/backend/dist ./dist
 COPY --from=builder /app/backend/prisma ./prisma
+COPY --from=builder /app/backend/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/backend/package.json ./package.json
 
 # Hoisted node_modules from workspace (backend resolves from here)
@@ -45,4 +46,4 @@ EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:4000/api/health || exit 1
 
-CMD ["sh", "-c", "npx prisma migrate deploy --schema=./prisma/schema.prisma && node dist/main.js"]
+CMD ["sh", "-c", "npx prisma migrate deploy --schema=./prisma/schema.prisma --config=./prisma.config.ts && node dist/main.js"]
