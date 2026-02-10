@@ -32,13 +32,15 @@ ENV PORT=3000
 
 RUN groupadd --system --gid 1001 nodejs && useradd --system --uid 1001 --gid nodejs nextjs
 
-# Copy standalone output (server.js + .next/static are inside standalone)
+# Copy standalone output. In monorepos, Next.js nests as standalone/frontend/ (so server.js is inside)
 COPY --from=builder --chown=nextjs:nodejs /app/frontend/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/frontend/.next/static ./.next/static
-COPY --from=builder /app/frontend/public ./public
+# Static and public: flat layout uses ./, nested (monorepo) uses frontend/
+COPY --from=builder --chown=nextjs:nodejs /app/frontend/.next/static ./frontend/.next/static
+COPY --from=builder /app/frontend/public ./frontend/public
 
 USER nextjs
 
 EXPOSE 3000
 
-CMD ["node", "server.js"]
+# In monorepos, server.js is at frontend/server.js; otherwise at server.js
+CMD ["sh", "-c", "if [ -f frontend/server.js ]; then node frontend/server.js; else node server.js; fi"]
