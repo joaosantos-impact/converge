@@ -50,21 +50,24 @@ async function proxy(
   const backendUrl = `${getBackendUrl()}/api/${pathString}${queryString}`;
 
   const headers = new Headers(request.headers);
-  // Replace host so backend receives correct Host
   headers.delete('host');
 
-  let body: ArrayBuffer | string | undefined;
-  try {
-    body = await request.arrayBuffer();
-  } catch {
-    body = undefined;
+  // GET and HEAD must not have a body
+  const methodsWithBody = ['POST', 'PUT', 'PATCH', 'DELETE'];
+  let body: ArrayBuffer | undefined;
+  if (methodsWithBody.includes(request.method)) {
+    try {
+      body = await request.arrayBuffer();
+    } catch {
+      body = undefined;
+    }
   }
 
   try {
     const backendResponse = await fetch(backendUrl, {
       method: request.method,
       headers,
-      body: body ?? undefined,
+      body: body && body.byteLength > 0 ? body : undefined,
     });
 
     const responseHeaders = new Headers(backendResponse.headers);
