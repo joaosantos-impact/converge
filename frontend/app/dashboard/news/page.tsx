@@ -27,9 +27,13 @@ export default function NewsPage() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
   const loading = isPending;
-  const [notificationsEnabled, setNotificationsEnabled] = useState(
-    () => typeof window !== 'undefined' && localStorage.getItem('news-notifications') === 'true',
-  );
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && localStorage.getItem('news-notifications') === 'true') {
+      setNotificationsEnabled(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (isPending) return;

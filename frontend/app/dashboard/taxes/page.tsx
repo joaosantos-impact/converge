@@ -27,7 +27,15 @@ import type { TradeData } from '@/lib/types';
 import { toast } from 'sonner';
 import { FadeIn } from '@/components/animations';
 import { AssetIcon } from '@/components/AssetIcon';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
+
+// CIRS Art. 10.º n.º 19 — isenção de mais-valias em criptoactivos detidos ≥365 dias
+// Regra introduzida pela Lei n.º 24-D/2022 (OE 2023)
+const PT_TAX_LAW = {
+  label: 'CIRS, aprovado pelo Decreto-Lei n.º 442-A/88, na redação dada pela Lei n.º 24-D/2022',
+  article: 'Art. 10.º, n.º 19',
+  url: 'https://info.portaldasfinancas.gov.pt/pt/informacao_fiscal/codigos_tributarios/cirs_rep/Pages/irs10.aspx',
+};
 
 // Dynamic import — jsPDF is ~300KB, only load when user exports
 const generateTaxReportPDF = async (...args: Parameters<typeof import('@/lib/pdf-export').generateTaxReportPDF>) => {
@@ -525,14 +533,29 @@ export default function TaxesPage() {
         <div className="space-y-6">
           {/* Portugal tax regime */}
           <div className="p-4 border border-border bg-card">
-            <div className="flex items-start gap-4">
-              <div className="w-1 h-12 bg-foreground" />
-              <div>
-                <p className="font-medium text-sm">Regime Fiscal Portugal</p>
+            <div className="flex items-stretch gap-4">
+              <div className="w-1 bg-foreground shrink-0" />
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-medium text-sm">Regime Fiscal Portugal</p>
+                  <a
+                    href={PT_TAX_LAW.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 p-1 -m-1 text-muted-foreground hover:text-foreground transition-colors"
+                    title={`Consultar ${PT_TAX_LAW.label} — ${PT_TAX_LAW.article}`}
+                    aria-label={`Abrir lei em nova janela: CIRS ${PT_TAX_LAW.article}`}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </a>
+                </div>
                 <p className="text-sm text-muted-foreground mt-1">
                   Criptomoedas detidas por mais de <span className="text-foreground font-medium">365 dias</span> estão
-                  isentas de imposto sobre mais-valias. Vendas com detenção inferior são tributadas a <span className="text-foreground font-medium">28%</span>.
+                  isentas de imposto sobre mais-valias (<span className="text-foreground font-medium">CIRS {PT_TAX_LAW.article}</span>). Vendas com detenção inferior são tributadas a <span className="text-foreground font-medium">28%</span>.
                   O método <span className="text-foreground font-medium">FIFO</span> é utilizado para determinar a detenção de cada venda.
+                </p>
+                <p className="text-[11px] text-muted-foreground/80 mt-1.5">
+                  {PT_TAX_LAW.label} — {PT_TAX_LAW.article} (isenção de mais-valias em criptoactivos detidos ≥365 dias). Mesmo isentas, as vendas devem ser declaradas no IRS (Anexo G1).
                 </p>
               </div>
             </div>
@@ -758,7 +781,12 @@ export default function TaxesPage() {
           <div className="border border-border bg-card">
             <div className="p-4 border-b border-border">
               <div className="flex items-center justify-between">
-                <p className="font-medium text-sm">Elegibilidade Fiscal</p>
+                <div>
+                  <p className="font-medium text-sm">Elegibilidade Fiscal</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    Cada compra conta. A mais antiga determina a isenção (FIFO).
+                  </p>
+                </div>
                 {holdings.length > ELIGIBILITY_PER_PAGE && (
                   <div className="flex items-center gap-1">
                     <Button
@@ -815,8 +843,8 @@ export default function TaxesPage() {
                       />
                     </div>
                     <div className="flex items-center justify-between mt-1">
-                      <p className="text-xs text-muted-foreground">{h.holdingDays} dias (lote mais antigo)</p>
-                      <p className="text-xs text-muted-foreground">{h.buyLots.length} lote{h.buyLots.length !== 1 ? 's' : ''} FIFO</p>
+                      <p className="text-xs text-muted-foreground">{h.holdingDays} dias (compra mais antiga)</p>
+                      <p className="text-xs text-muted-foreground">{h.buyLots.length} compra{h.buyLots.length !== 1 ? 's' : ''}</p>
                     </div>
                   </div>
                 </div>
@@ -936,8 +964,8 @@ export default function TaxesPage() {
 
           {/* Notes */}
           <div className="p-4 bg-muted text-xs text-muted-foreground space-y-2">
-            <p>-- Cada venda é cruzada com os lotes de compra mais antigos (FIFO)</p>
-            <p>-- Se todos os lotes da venda tiverem &gt;365 dias, o ganho é isento</p>
+            <p>-- Cada venda é cruzada com as compras mais antigas (FIFO)</p>
+            <p>-- Se todas as compras usadas tiverem &gt;365 dias, o ganho é isento</p>
             <p>-- Vendas parcialmente isentas mostram a divisão</p>
             <p>-- Perdas tributáveis compensam ganhos no mesmo ano</p>
           </div>

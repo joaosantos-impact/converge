@@ -171,6 +171,10 @@ export class CcxtService {
   /**
    * Fetch trades for a symbol with pagination — continues until all trades are retrieved.
    * Binance limits to 1000/request; without this we'd miss trades (e.g. recent ADA sells).
+   *
+   * Binance: the `since` param only returns ~3 months. For full history (2020+), we must use
+   * fromId=0 to start from oldest trades, then paginate forward. See CCXT example:
+   * https://github.com/ccxt/ccxt/blob/master/examples/py/binance-fetch-all-my-trades-paginate-by-id.py
    */
   async fetchTrades(
     exchange: any,
@@ -193,21 +197,30 @@ export class CcxtService {
     }>
   > {
     const LIMIT_PER_REQUEST = 1000;
-    const MAX_PAGES = 100;
+    const MAX_PAGES = 200; // 200 * 1000 = 200k trades per symbol; Binance full history can be large
     const allTrades: Array<ReturnType<typeof this.mapTrade>> = [];
     const seenIds = new Set<string>();
     const isBinance = (exchange?.id || exchange?.name || '').toLowerCase().startsWith('binance');
     let currentSince = since;
     let fromId: string | undefined;
-    let page = 0;
 
+    // Binance: `since` only returns ~3 months. For full history (e.g. since > 6 months ago),
+    // use fromId=0 to start from oldest trades, then paginate forward.
+    const SIX_MONTHS_MS = 180 * 24 * 60 * 60 * 1000;
+    const useBinanceFromIdStart =
+      isBinance && since != null && since < Date.now() - SIX_MONTHS_MS;
+    if (useBinanceFromIdStart) {
+      fromId = '0';
+    }
+
+    let page = 0;
     try {
       while (page < MAX_PAGES) {
         page++;
-        const params = fromId ? { fromId } : {};
+        const params = fromId != null ? { fromId } : {};
         const trades = await exchange.fetchMyTrades(
           symbol,
-          fromId ? undefined : currentSince,
+          fromId != null ? undefined : currentSince,
           LIMIT_PER_REQUEST,
           Object.keys(params).length ? params : undefined,
         );
@@ -315,14 +328,13 @@ export class CcxtService {
 
     const symbolsToFetch = this.buildSymbolsForMarket(exchange, assets, marketType);
 
-    const isBinance = (exchange?.id || exchange?.name || '').toLowerCase().startsWith('binance');
-    // Binance: 6000 request weight/min; fetchMyTrades = 10 weight → throttle to avoid 429
-    const BATCH_SIZE = isBinance ? 2 : 3;
-    const BINANCE_DELAY_MS = 550; // ~10 requests per minute per batch
+    // Conservative throttling for all exchanges to avoid 429 (Binance, Kraken, etc.)
+    const BATCH_SIZE = 2;
+    const BATCH_DELAY_MS = 550;
 
     for (let i = 0; i < symbolsToFetch.length; i += BATCH_SIZE) {
-      if (isBinance && i > 0) {
-        await new Promise((r) => setTimeout(r, BINANCE_DELAY_MS));
+      if (i > 0) {
+        await new Promise((r) => setTimeout(r, BATCH_DELAY_MS));
       }
       const batch = symbolsToFetch.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
@@ -342,8 +354,8 @@ export class CcxtService {
         } else if (result.status === 'rejected') {
           const err = result.reason as Error & { message?: string };
           const is429 = err?.message?.includes('429') || err?.message?.includes('Too Many Requests');
-          if (isBinance && is429) {
-            this.logger.warn('Binance rate limit (429), waiting 65s before continuing');
+          if (is429) {
+            this.logger.warn(`Rate limit (429) on ${exchange?.id || exchange?.name || 'exchange'}, waiting 65s`);
             await new Promise((r) => setTimeout(r, 65_000));
           }
           throw result.reason;

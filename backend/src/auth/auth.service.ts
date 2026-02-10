@@ -15,12 +15,22 @@ export class AuthService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
 
   onModuleInit() {
+    const baseURL = process.env.BETTER_AUTH_URL;
+    const socialProviders: Record<string, { clientId: string; clientSecret: string }> = {};
+    if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+      socialProviders.google = {
+        clientId: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      };
+    }
     this.auth = betterAuth({
       appName: 'Converge',
+      baseURL,
       database: prismaAdapter(this.prisma, {
         provider: 'postgresql',
       }),
       basePath: '/api/auth',
+      socialProviders: Object.keys(socialProviders).length > 0 ? socialProviders : undefined,
       user: {
         additionalFields: {
           onboardingCompleted: {

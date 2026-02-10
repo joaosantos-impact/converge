@@ -122,7 +122,7 @@ export default function DCACalculatorPage() {
   };
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6 max-w-3xl mx-auto">
       <FadeIn>
         <div>
           <h1 className="text-xl font-medium tracking-tight">DCA Calculator</h1>

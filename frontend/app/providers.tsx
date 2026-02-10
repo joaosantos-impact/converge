@@ -12,17 +12,34 @@ interface CurrencyContextType {
   currency: Currency;
   setCurrency: (currency: Currency) => void;
   formatValue: (usdValue: number) => string;
+  /** For very small values (e.g. PEPE price) — avoids rounding to 0,00 € */
+  formatPrice: (usdValue: number) => string;
+  /** For chart axes — uses scientific notation (×10ⁿ) when value &lt; 0.01 */
+  formatChartValue: (usdValue: number) => string;
   rates: { EUR: number; BTC: number };
 }
 
 const CurrencyContext = createContext<CurrencyContextType | undefined>(undefined);
 
 // Default fallback so useCurrency never throws (safe during SSR / hot-reload)
+const defaultFormatPrice = (v: number) =>
+  new Intl.NumberFormat('de-DE', {
+    style: 'currency',
+    currency: 'EUR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 8,
+  }).format(v * 0.92);
+
+const formatChartValueDefault = (v: number) =>
+  Math.abs(v) < 0.01 && v !== 0 ? v.toExponential(2) : defaultFormatPrice(v);
+
 const DEFAULT_CURRENCY_CONTEXT: CurrencyContextType = {
   currency: 'EUR',
   setCurrency: () => {},
   formatValue: (v: number) =>
     new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2 }).format(v * 0.92),
+  formatPrice: defaultFormatPrice,
+  formatChartValue: formatChartValueDefault,
   rates: { EUR: 0.92, BTC: 0.000015 },
 };
 
@@ -124,8 +141,47 @@ function CurrencyProvider({ children }: { children: React.ReactNode }) {
     }
   }, [currency, rates]);
 
+  const formatPrice = useCallback((usdValue: number): string => {
+    const abs = Math.abs(usdValue);
+    const eurAbs = abs * rates.EUR;
+    // Use exponential for tiny values that would show as 0,00 €
+    if (abs > 0 && eurAbs < 0.0001) {
+      const exp = (usdValue * (currency === 'EUR' ? rates.EUR : currency === 'USD' ? 1 : rates.BTC)).toExponential(2);
+      return currency === 'EUR' ? `${exp} €` : currency === 'USD' ? `$${exp}` : `₿${exp}`;
+    }
+    const needExtraDecimals = abs > 0 && abs < 0.01;
+    const decimals = needExtraDecimals ? Math.min(8, Math.max(2, Math.ceil(-Math.log10(abs)))) : 2;
+
+    if (currency === 'USD') {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: 'USD',
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: 8,
+      }).format(usdValue);
+    } else if (currency === 'EUR') {
+      return new Intl.NumberFormat('de-DE', {
+        style: 'currency',
+        currency: 'EUR',
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: 8,
+      }).format(usdValue * rates.EUR);
+    } else {
+      const btcValue = usdValue * rates.BTC;
+      return `₿${btcValue.toFixed(btcValue < 0.0001 ? 8 : 4)}`;
+    }
+  }, [currency, rates]);
+
+  const formatChartValue = useCallback((usdValue: number): string => {
+    const abs = Math.abs(usdValue);
+    if (abs > 0 && abs < 0.01) {
+      return usdValue.toExponential(2);
+    }
+    return formatValue(usdValue);
+  }, [formatValue]);
+
   return (
-    <CurrencyContext.Provider value={{ currency, setCurrency: handleSetCurrency, formatValue, rates }}>
+    <CurrencyContext.Provider value={{ currency, setCurrency: handleSetCurrency, formatValue, formatPrice, formatChartValue, rates }}>
       {children}
     </CurrencyContext.Provider>
   );

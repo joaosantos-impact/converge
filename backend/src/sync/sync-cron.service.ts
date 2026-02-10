@@ -1,7 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { SyncService } from './sync.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { SYNC_QUEUE_SERVICE } from './sync.constants';
+import type { SyncQueueService } from './sync-queue.service';
 
 const isConnectionError = (err: unknown): boolean => {
   const msg = err instanceof Error ? err.message : String(err);
@@ -19,14 +21,17 @@ export class SyncCronService {
   constructor(
     private readonly syncService: SyncService,
     private readonly prisma: PrismaService,
+    @Inject(SYNC_QUEUE_SERVICE)
+    private readonly queueService: SyncQueueService,
   ) {}
 
   /**
-   * Runs every 5 minutes. Syncs all users with active exchange accounts.
+   * Runs every 8 hours. With Redis: enqueues sync jobs for all users (workers process in parallel).
+   * Without Redis: runs sync sequentially as before.
    * Prevents overlapping runs with an in-memory lock.
    * Retries once on DB connection errors (e.g. Neon idle disconnect).
    */
-  @Cron('*/5 * * * *')
+  @Cron('0 */8 * * *')
   async handleCron() {
     if (this.isRunning) {
       this.logger.log('[CRON] Sync already running, skipping.');
@@ -38,11 +43,30 @@ export class SyncCronService {
     this.logger.log('[CRON] Starting background sync for all users...');
 
     const runOnce = async (): Promise<void> => {
-      const result = await this.syncService.syncAllUsers();
-      const elapsed = Date.now() - startTime;
-      this.logger.log(
-        `[CRON] Completed in ${elapsed}ms — users: ${result.users}, synced: ${result.synced}, failed: ${result.failed}`,
-      );
+      if (this.queueService.isQueueMode()) {
+        const usersWithAccounts = await this.prisma.exchangeAccount.findMany({
+          where: { isActive: true },
+          select: { userId: true },
+          distinct: ['userId'],
+        });
+        const userIds = usersWithAccounts.map((u) => u.userId);
+        for (const userId of userIds) {
+          await this.queueService.addJob(userId, false).catch((err) => {
+            this.logger.warn(`[CRON] Failed to enqueue user ${userId}:`, err);
+          });
+        }
+        await this.syncService.runGlobalCleanup();
+        const elapsed = Date.now() - startTime;
+        this.logger.log(
+          `[CRON] Enqueued ${userIds.length} users in ${elapsed}ms`,
+        );
+      } else {
+        const result = await this.syncService.syncAllUsers();
+        const elapsed = Date.now() - startTime;
+        this.logger.log(
+          `[CRON] Completed in ${elapsed}ms — users: ${result.users}, synced: ${result.synced}, failed: ${result.failed}`,
+        );
+      }
     };
 
     try {

@@ -14,36 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { useSession } from '@/lib/auth-client';
 import { toast } from 'sonner';
-import dynamic from 'next/dynamic';
-
-const RechartsComponents = dynamic(
-  () => import('recharts').then(mod => ({
-    default: ({ data }: { data: { date: string; count: number }[] }) => (
-      <mod.ResponsiveContainer width="100%" height="100%">
-        <mod.AreaChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 0 }}>
-          <defs>
-            <linearGradient id="growthGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="hsl(var(--foreground))" stopOpacity={0.15} />
-              <stop offset="100%" stopColor="hsl(var(--foreground))" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <mod.XAxis dataKey="date" tick={{ fontSize: 10, fill: 'currentColor', opacity: 0.3 }} tickLine={false} axisLine={false} tickFormatter={(v: string) => new Date(v).toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })} />
-          <mod.YAxis tick={{ fontSize: 10, fill: 'currentColor', opacity: 0.3 }} tickLine={false} axisLine={false} width={30} />
-          <mod.Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 0, fontSize: 12 }} />
-          <mod.Area type="monotone" dataKey="count" stroke="hsl(var(--foreground))" strokeWidth={1.5} fill="url(#growthGrad)" />
-        </mod.AreaChart>
-      </mod.ResponsiveContainer>
-    ),
-  })),
-  {
-    loading: () => (
-      <div className="h-full flex items-center justify-center">
-        <div className="w-5 h-5 border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin" />
-      </div>
-    ),
-    ssr: false,
-  }
-);
+import { D3AreaChart } from '@/components/charts';
 
 interface BlogPost {
   id: string;
@@ -272,8 +243,14 @@ export default function AdminPage() {
             {stats.growthData.length > 0 && (
               <div className="border border-border bg-card">
                 <div className="px-5 py-4 border-b border-border"><p className="text-sm font-medium">Crescimento de utilizadores (30 dias)</p></div>
-                <div className="p-4 h-64">
-                  <RechartsComponents data={stats.growthData} />
+                <div className="p-4">
+                  <D3AreaChart
+                    data={stats.growthData.map((d) => ({ timestamp: d.date, value: d.count }))}
+                    height={256}
+                    strokeColor="hsl(var(--foreground))"
+                    formatDate={(ts) => new Date(ts).toLocaleDateString('pt-PT', { day: 'numeric', month: 'short' })}
+                    showMax
+                  />
                 </div>
               </div>
             )}

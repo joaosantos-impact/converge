@@ -20,60 +20,12 @@ import { useCurrency } from '@/app/providers';
 import { AssetIcon } from '@/components/AssetIcon';
 import { FadeIn } from '@/components/animations';
 import { PremiumChart } from '@/components/PremiumChart';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
+import { D3DualAreaChart } from '@/components/charts';
 
 const COMPARE_COLOR_A = '#8b5cf6'; // violet-500 (primeiro ativo, esquerda)
 const COMPARE_COLOR_B = '#f97316'; // orange-500 (segundo ativo, direita)
 
 type CompareMode = 'percent' | 'price';
-
-/** Declared outside render for react-hooks/static-components */
-function CompareChartTooltip({
-  active,
-  payload,
-  labelA,
-  labelB,
-  mode,
-}: {
-  active?: boolean;
-  payload?: Array<{ payload?: { date: string; a: number; b: number }; value: number }>;
-  labelA: string;
-  labelB: string;
-  mode: CompareMode;
-}) {
-  if (active && payload && payload.length) {
-    const d = payload[0].payload!;
-    return (
-      <div className="bg-card border border-border px-4 py-3 shadow-xl">
-        <p className="text-xs text-muted-foreground mb-1.5">{d.date}</p>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COMPARE_COLOR_A }} />
-            <span className="text-sm font-semibold font-display">
-              {mode === 'percent' ? `${d.a >= 0 ? '+' : ''}${d.a.toFixed(1)}%` : `Índice ${d.a.toFixed(1)}`}
-            </span>
-            <span className="text-[10px] text-muted-foreground">{labelA}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COMPARE_COLOR_B }} />
-            <span className="text-sm font-semibold font-display">
-              {mode === 'percent' ? `${d.b >= 0 ? '+' : ''}${d.b.toFixed(1)}%` : `Índice ${d.b.toFixed(1)}`}
-            </span>
-            <span className="text-[10px] text-muted-foreground">{labelB}</span>
-          </div>
-        </div>
-      </div>
-    );
-  }
-  return null;
-}
 
 const ASSETS = [
   { id: 'BTC', name: 'Bitcoin' },
@@ -101,135 +53,13 @@ const PERIODS: Record<Period, { days: number; interval: string; label: string }>
   'all': { days: 2555, interval: '1d', label: 'Desde sempre' },
 };
 
-/**
- * Dual-line comparison chart for overlaying two normalized datasets.
- * mode 'percent': % change from start (can go negative). mode 'price': index 100 at start (both series same scale).
- */
-function ComparisonChart({
-  dataA,
-  dataB,
-  labelA,
-  labelB,
-  period,
-  mode,
-}: {
-  dataA: Array<{ timestamp: string; value: number }>;
-  dataB: Array<{ timestamp: string; value: number }>;
-  labelA: string;
-  labelB: string;
-  period: string;
-  mode: CompareMode;
-}) {
-  const merged = useMemo(() => {
-    const len = Math.min(dataA.length, dataB.length);
-    if (len === 0) return [];
-    return Array.from({ length: len }, (_, i) => ({
-      timestamp: dataA[i].timestamp,
-      date: new Date(dataA[i].timestamp).toLocaleDateString('pt-PT', {
-        day: '2-digit',
-        month: 'short',
-        ...((period === '1y' || period === '2y' || period === '4y' || period === 'all') ? { year: '2-digit' as const } : {}),
-      }),
-      a: dataA[i].value,
-      b: dataB[i]?.value ?? 0,
-    }));
-  }, [dataA, dataB, period]);
-
-  const gradientIdA = 'cmp-grad-a';
-  const gradientIdB = 'cmp-grad-b';
-
-  const baseValue = useMemo(() => {
-    if (merged.length === 0) return 0;
-    let min = merged[0].a;
-    for (const row of merged) {
-      if (row.a < min) min = row.a;
-      if (row.b < min) min = row.b;
-    }
-    return min;
-  }, [merged]);
-
-  const yAxisFormatter = mode === 'percent'
-    ? (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(0)}%`
-    : (v: number) => v.toFixed(0);
-
-  if (merged.length === 0) {
-    return (
-      <div className="h-[280px] flex items-center justify-center text-muted-foreground text-sm">
-        Sem dados para este período
-      </div>
-    );
-  }
-
-  return (
-    <ResponsiveContainer width="100%" height={280}>
-      <AreaChart data={merged} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-        <defs>
-          <linearGradient id={gradientIdA} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={COMPARE_COLOR_A} stopOpacity={0.35} />
-            <stop offset="100%" stopColor={COMPARE_COLOR_A} stopOpacity={0} />
-          </linearGradient>
-          <linearGradient id={gradientIdB} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={COMPARE_COLOR_B} stopOpacity={0.25} />
-            <stop offset="100%" stopColor={COMPARE_COLOR_B} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <XAxis
-          dataKey="date"
-          tick={{ fill: 'currentColor', opacity: 0.45, fontSize: 12, fontFamily: 'var(--font-display)' }}
-          tickLine={false}
-          axisLine={false}
-          interval="preserveStartEnd"
-          minTickGap={60}
-          dy={8}
-        />
-        <YAxis
-          tick={{ fill: 'currentColor', opacity: 0.45, fontSize: 12, fontFamily: 'var(--font-display)' }}
-          tickLine={false}
-          axisLine={false}
-          tickFormatter={yAxisFormatter}
-          width={60}
-          dx={-4}
-        />
-        <Tooltip content={<CompareChartTooltip labelA={labelA} labelB={labelB} mode={mode} />} cursor={{ stroke: 'hsl(var(--foreground))', strokeWidth: 1, strokeDasharray: '4 4', opacity: 0.3 }} />
-        <Area
-          type="monotone"
-          dataKey="a"
-          stroke={COMPARE_COLOR_A}
-          strokeWidth={2.5}
-          fill={`url(#${gradientIdA})`}
-          baseValue={baseValue}
-          dot={false}
-          activeDot={{ r: 5, strokeWidth: 2, stroke: 'hsl(var(--background))', fill: COMPARE_COLOR_A }}
-          animationDuration={800}
-          animationEasing="ease-out"
-          name={labelA}
-        />
-        <Area
-          type="monotone"
-          dataKey="b"
-          stroke={COMPARE_COLOR_B}
-          strokeWidth={2}
-          strokeDasharray="6 3"
-          fill={`url(#${gradientIdB})`}
-          baseValue={baseValue}
-          dot={false}
-          activeDot={{ r: 5, strokeWidth: 2, stroke: 'hsl(var(--background))', fill: COMPARE_COLOR_B }}
-          animationDuration={800}
-          animationEasing="ease-out"
-          name={labelB}
-        />
-      </AreaChart>
-    </ResponsiveContainer>
-  );
-}
-
 interface PriceData {
   timestamp: string;
   close: number;
 }
 
 export default function ComparePage() {
-  const { formatValue } = useCurrency();
+  const { formatValue, formatChartValue } = useCurrency();
   const [assetA, setAssetA] = useState('BTC');
   const [assetB, setAssetB] = useState('ETH');
   const [period, setPeriod] = useState<Period>('90d');
@@ -290,6 +120,30 @@ export default function ComparePage() {
   const changeB = dataB.length >= 2 ? ((dataB[dataB.length - 1].close - dataB[0].close) / dataB[0].close) * 100 : 0;
   const priceA = dataA.length > 0 ? dataA[dataA.length - 1].close : 0;
   const priceB = dataB.length > 0 ? dataB[dataB.length - 1].close : 0;
+
+  const compareUseYearOnly = period === '1y' || period === '2y' || period === '4y' || period === 'all';
+
+  const mergedCompareData = useMemo(() => {
+    const len = Math.min(normalizedA.length, normalizedB.length);
+    if (len === 0) return [];
+    return Array.from({ length: len }, (_, i) => {
+      const ts = normalizedA[i].timestamp;
+      const d = new Date(ts);
+      const date = compareUseYearOnly
+        ? ts
+        : d.toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: '2-digit' });
+      return {
+        timestamp: ts,
+        date,
+        a: normalizedA[i].value,
+        b: normalizedB[i]?.value ?? 0,
+      };
+    });
+  }, [normalizedA, normalizedB, compareUseYearOnly]);
+
+  const compareFormatValue = compareMode === 'percent'
+    ? (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(0)}%`
+    : (v: number) => v.toFixed(0);
 
   return (
     <div className="space-y-6">
@@ -381,11 +235,16 @@ export default function ComparePage() {
       {/* Charts */}
       <FadeIn delay={0.15}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="border border-border bg-card">
-            <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+          <div className="border border-border bg-card min-w-0 overflow-hidden">
+            <div className="px-4 py-3 border-b border-border flex items-center gap-2 flex-wrap">
               <AssetIcon symbol={assetA} size={20} />
               <p className="text-xs font-medium">{assetA}</p>
               <span className="text-[10px] text-muted-foreground">Preço</span>
+              {dataA.length > 0 && (
+                <span className="text-[10px] text-muted-foreground ml-auto">
+                  Max {formatChartValue(Math.max(...dataA.map(d => d.close)))}
+                </span>
+              )}
             </div>
             <div className="p-3">
               {loading ? (
@@ -396,19 +255,26 @@ export default function ComparePage() {
                 <PremiumChart
                   data={dataA.map(d => ({ timestamp: d.timestamp, value: d.close }))}
                   height={220}
-                  formatValue={formatValue}
+                  formatValue={formatChartValue}
                   strokeColor={COMPARE_COLOR_A}
                   timeRange={period}
+                  xAxisFormat={period === '1y' || period === '2y' || period === '4y' || period === 'all' ? 'year' : 'default'}
+                  hideMaxInChart
                 />
               )}
             </div>
           </div>
 
-          <div className="border border-border bg-card">
-            <div className="px-4 py-3 border-b border-border flex items-center gap-2">
+          <div className="border border-border bg-card min-w-0 overflow-hidden">
+            <div className="px-4 py-3 border-b border-border flex items-center gap-2 flex-wrap">
               <AssetIcon symbol={assetB} size={20} />
               <p className="text-xs font-medium">{assetB}</p>
               <span className="text-[10px] text-muted-foreground">Preço</span>
+              {dataB.length > 0 && (
+                <span className="text-[10px] text-muted-foreground ml-auto">
+                  Max {formatChartValue(Math.max(...dataB.map(d => d.close)))}
+                </span>
+              )}
             </div>
             <div className="p-3">
               {loading ? (
@@ -419,9 +285,11 @@ export default function ComparePage() {
                 <PremiumChart
                   data={dataB.map(d => ({ timestamp: d.timestamp, value: d.close }))}
                   height={220}
-                  formatValue={formatValue}
+                  formatValue={formatChartValue}
                   strokeColor={COMPARE_COLOR_B}
                   timeRange={period}
+                  xAxisFormat={period === '1y' || period === '2y' || period === '4y' || period === 'all' ? 'year' : 'default'}
+                  hideMaxInChart
                 />
               )}
             </div>
@@ -485,13 +353,28 @@ export default function ComparePage() {
               {assetA} {changeA > changeB ? 'lidera' : 'atrás'} por {Math.abs(changeA - changeB).toFixed(1)}%
             </p>
           </div>
-          <div className="p-3">
+          <div className="p-3 min-w-0 overflow-hidden">
             {loading ? (
               <div className="h-64 flex items-center justify-center">
                 <div className="w-5 h-5 border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin" />
               </div>
+            ) : mergedCompareData.length > 0 ? (
+              <D3DualAreaChart
+                data={mergedCompareData}
+                height={280}
+                colorA={COMPARE_COLOR_A}
+                colorB={COMPARE_COLOR_B}
+                formatValue={compareFormatValue}
+                formatDate={compareUseYearOnly
+                  ? (ts) => new Date(ts).getFullYear().toString()
+                  : (ts) => new Date(ts).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: '2-digit' })}
+                labelA={assetA}
+                labelB={assetB}
+              />
             ) : (
-              <ComparisonChart dataA={normalizedA} dataB={normalizedB} labelA={assetA} labelB={assetB} period={period} mode={compareMode} />
+              <div className="h-[280px] flex items-center justify-center text-muted-foreground text-sm">
+                Sem dados para este período
+              </div>
             )}
           </div>
         </div>

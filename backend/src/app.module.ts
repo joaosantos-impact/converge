@@ -6,6 +6,7 @@ import * as path from 'path';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { SyncModule } from './sync/sync.module';
+import { ExchangesCoreModule } from './exchanges/exchanges-core.module';
 import { ExchangesModule } from './exchanges/exchanges.module';
 import { PortfolioModule } from './portfolio/portfolio.module';
 import { TradesModule } from './trades/trades.module';
@@ -43,7 +44,8 @@ class HealthController {
     }]),
     PrismaModule,
     AuthModule,
-    SyncModule,
+    ExchangesCoreModule,
+    SyncModule.forRoot(),
     ExchangesModule,
     PortfolioModule,
     TradesModule,

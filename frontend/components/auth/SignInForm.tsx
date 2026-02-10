@@ -2,18 +2,21 @@
 
 import { useState } from "react";
 import { signIn } from "@/lib/auth-client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
+import { SocialSignInButtons } from "./SocialSignInButtons";
 
 export function SignInForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,6 +44,23 @@ export function SignInForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 w-full">
+      <SocialSignInButtons
+        callbackUrl={callbackUrl}
+        disabled={isLoading}
+        onError={setError}
+        socialLoading={socialLoading}
+        onSocialLoadingChange={setSocialLoading}
+      />
+
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t border-white/10" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-[#050505] px-2 text-white/35">ou</span>
+        </div>
+      </div>
+
       <div className="space-y-2">
         <Label htmlFor="email" className="text-sm font-medium">Email</Label>
         <Input

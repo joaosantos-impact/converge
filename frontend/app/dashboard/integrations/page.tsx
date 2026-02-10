@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useState, useMemo, useCallback } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -391,14 +391,23 @@ function IntegrationForm({ integration, onSuccess, onCancel }: { integration: In
 function IntegrationsPageContent() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const isMobile = useIsMobile();
+  const [mounted, setMounted] = useState(false);
   const [search, setSearch] = useState('');
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<ExchangeAccount | null>(null);
   const [dialogMode, setDialogMode] = useState<'add' | 'details' | null>(null);
+  const [pollFast, setPollFast] = useState(false);
 
-  const pollFast = searchParams.get('syncing') === '1';
+  // Read ?syncing=1 from URL in useEffect to avoid hydration mismatch (useSearchParams
+  // can cause server/client diff when used in initial render)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    setPollFast(params.get('syncing') === '1');
+    setMounted(true);
+  }, []);
+
   const { syncing } = useAutoSync({ pollFast });
 
   const { data: accountsData = [], error: accountsError } = useExchangeAccounts();
@@ -466,7 +475,9 @@ function IntegrationsPageContent() {
 
   const connectedCount = connectedIds.length;
 
-  if (isPending) {
+  // Show Skeleton until mounted AND session ready — avoids hydration mismatch
+  // (server has isPending=true, client may have isPending=false before hydrate)
+  if (!mounted || isPending) {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-48" />
@@ -522,14 +533,6 @@ function IntegrationsPageContent() {
           </div>
         </div>
       </FadeIn>
-
-      {/* Syncing banner when we just added an integration (hide when no accounts — e.g. last one removed) */}
-      {syncing && connectedCount > 0 && (
-        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-muted border border-border">
-          <div className="w-4 h-4 border-2 border-foreground/30 border-t-foreground animate-spin shrink-0" />
-          <span className="text-sm text-muted-foreground">A sincronizar a nova integração…</span>
-        </div>
-      )}
 
       {/* Search */}
       <div className="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">

@@ -11,7 +11,6 @@ import {
   HttpStatus,
   Logger,
   Inject,
-  forwardRef,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { z } from 'zod';
@@ -20,7 +19,8 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { EncryptionService } from './encryption.service';
 import { CcxtService, SUPPORTED_EXCHANGES } from './ccxt.service';
-import { SyncService } from '../sync/sync.service';
+import { SYNC_QUEUE_SERVICE } from '../sync/sync.constants';
+import type { SyncQueueService } from '../sync/sync-queue.service';
 
 const supportedExchangeIds = SUPPORTED_EXCHANGES.map((e) => e.id);
 
@@ -49,8 +49,8 @@ export class ExchangesController {
     private readonly prisma: PrismaService,
     private readonly encryption: EncryptionService,
     private readonly ccxt: CcxtService,
-    @Inject(forwardRef(() => SyncService))
-    private readonly syncService: SyncService,
+    @Inject(SYNC_QUEUE_SERVICE)
+    private readonly queueService: SyncQueueService,
   ) {}
 
   @Get()
@@ -158,11 +158,10 @@ export class ExchangesController {
         apiPassphrase: encryptedPassphrase,
       });
       await exchange.fetchBalance();
-    } catch {
-      throw new HttpException(
-        'Falha ao conectar à exchange. Verifica as tuas credenciais API.',
-        HttpStatus.BAD_REQUEST,
-      );
+    } catch (err) {
+      const msg = this.getConnectionErrorMessage(err, data.exchange);
+      this.logger.warn(`Connection test failed for ${data.exchange}:`, err);
+      throw new HttpException(msg, HttpStatus.BAD_REQUEST);
     }
 
     const account = await this.prisma.exchangeAccount.create({
@@ -176,9 +175,9 @@ export class ExchangesController {
       },
     });
 
-    // Trigger full sync so SyncLog is created and frontend shows loading; skip cooldown for "just added"
-    this.syncService.triggerSync(user.id, { skipCooldown: true }).catch((err) => {
-      this.logger.error(`Auto-sync failed for ${account.name}:`, err);
+    // Enqueue sync so frontend shows loading; skip cooldown for "just added"
+    this.queueService.addJob(user.id, true).catch((err) => {
+      this.logger.error(`Auto-sync enqueue failed for ${account.name}:`, err);
     });
 
     return {
@@ -251,11 +250,10 @@ export class ExchangesController {
             : existing.apiPassphrase,
         });
         await exchange.fetchBalance();
-      } catch {
-        throw new HttpException(
-          'Falha ao conectar à exchange. Verifica as tuas credenciais API.',
-          HttpStatus.BAD_REQUEST,
-        );
+      } catch (err) {
+        const msg = this.getConnectionErrorMessage(err, existing.exchange);
+        this.logger.warn(`Connection test failed for ${existing.exchange}:`, err);
+        throw new HttpException(msg, HttpStatus.BAD_REQUEST);
       }
     }
 
@@ -293,6 +291,40 @@ export class ExchangesController {
 
     await this.prisma.exchangeAccount.delete({ where: { id } });
     return { success: true };
+  }
+
+  /**
+   * Maps exchange/CCXT errors to user-friendly messages.
+   * Logs the raw error for debugging.
+   */
+  private getConnectionErrorMessage(err: unknown, exchange: string): string {
+    const raw = err instanceof Error ? err.message : String(err);
+    const lower = raw.toLowerCase();
+
+    if (lower.includes('invalid api-key') || lower.includes('invalid apikey')) {
+      return 'API Key inválida. Verifica se copiaste a chave corretamente.';
+    }
+    if (lower.includes('signature') && (lower.includes('invalid') || lower.includes('not valid'))) {
+      return 'API Secret inválida. Verifica se copiaste o secret corretamente.';
+    }
+    if (lower.includes('ip') && (lower.includes('whitelist') || lower.includes('restrict'))) {
+      return `IP não permitido. Na ${exchange}, adiciona o IP do servidor à whitelist da API ou remove a restrição.`;
+    }
+    if (lower.includes('econnrefused') || lower.includes('enotfound')) {
+      return 'Não foi possível contactar a exchange. Verifica a tua ligação à internet.';
+    }
+    if (lower.includes('etimedout') || lower.includes('timeout')) {
+      return 'A exchange demorou demasiado a responder. Tenta novamente.';
+    }
+    if (lower.includes('429') || lower.includes('rate limit')) {
+      return 'Demasiados pedidos. Aguarda alguns minutos e tenta novamente.';
+    }
+    if (lower.includes('permission') || lower.includes('not allowed')) {
+      return 'A API key não tem permissões de leitura. Ativa "Enable Reading" nas definições da API.';
+    }
+    // Fallback: include a sanitized hint from the error if short enough
+    const hint = raw.length <= 80 ? raw : raw.slice(0, 77) + '...';
+    return `Falha ao conectar à exchange: ${hint}`;
   }
 
   private maskEncryptedKey(encryptedKey: string): string {

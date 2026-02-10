@@ -9,12 +9,11 @@ import {
 } from '@/components/ui/dialog';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import {
-  LayoutDashboard,
   Wallet,
   Link2,
   Receipt,
   Newspaper,
-  Bell,
+  BarChart3,
   History,
   Trophy,
   Rss,
@@ -22,7 +21,6 @@ import {
   Search,
   Calculator,
   GitCompare,
-  Target,
   PenLine,
   BookOpen,
 } from 'lucide-react';
@@ -37,11 +35,10 @@ interface SearchResult {
 }
 
 const PAGES: SearchResult[] = [
-  { id: 'dashboard', label: 'Dashboard', href: '/dashboard', icon: <LayoutDashboard className="h-4 w-4" />, category: 'page' },
   { id: 'portfolio', label: 'Portfolio', href: '/dashboard/portfolio', icon: <Wallet className="h-4 w-4" />, category: 'page' },
   { id: 'integrations', label: 'Integrações', href: '/dashboard/integrations', icon: <Link2 className="h-4 w-4" />, category: 'page' },
   { id: 'trades', label: 'Trades', href: '/dashboard/history', icon: <History className="h-4 w-4" />, category: 'page' },
-  { id: 'alerts', label: 'Alertas', href: '/dashboard/alerts', icon: <Bell className="h-4 w-4" />, category: 'page' },
+  { id: 'analytics', label: 'Estatísticas', href: '/dashboard/analytics', icon: <BarChart3 className="h-4 w-4" />, category: 'page' },
   { id: 'taxes', label: 'Impostos', href: '/dashboard/taxes', icon: <Receipt className="h-4 w-4" />, category: 'page' },
   { id: 'feed', label: 'Feed', href: '/dashboard/feed', icon: <Newspaper className="h-4 w-4" />, category: 'page' },
   { id: 'leaderboard', label: 'Leaderboard', href: '/dashboard/leaderboard', icon: <Trophy className="h-4 w-4" />, category: 'page' },
@@ -49,7 +46,6 @@ const PAGES: SearchResult[] = [
   { id: 'settings', label: 'Definições', href: '/dashboard/settings', icon: <Settings className="h-4 w-4" />, category: 'page' },
   { id: 'dca', label: 'DCA Calculator', description: 'Simulador de Dollar Cost Averaging', href: '/dashboard/dca', icon: <Calculator className="h-4 w-4" />, category: 'page' },
   { id: 'compare', label: 'Comparador', description: 'Comparar assets', href: '/dashboard/compare', icon: <GitCompare className="h-4 w-4" />, category: 'page' },
-  { id: 'goals', label: 'Objetivos', description: 'Metas do portfolio', href: '/dashboard/goals', icon: <Target className="h-4 w-4" />, category: 'page' },
   { id: 'journal', label: 'Journal', description: 'Diário de trading', href: '/dashboard/journal', icon: <PenLine className="h-4 w-4" />, category: 'page' },
   { id: 'blog', label: 'Blog', description: 'Artigos e guias', href: '/dashboard/blog', icon: <BookOpen className="h-4 w-4" />, category: 'page' },
 ];

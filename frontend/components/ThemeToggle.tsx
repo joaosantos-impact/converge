@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { Moon, Sun, Monitor } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
@@ -12,6 +13,17 @@ import {
 
 export function ThemeToggle() {
   const { setTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted) {
+    return (
+      <Button variant="ghost" size="icon" className="h-9 w-9 rounded-sm" aria-label="Mudar tema">
+        <span className="h-4 w-4" />
+      </Button>
+    );
+  }
 
   return (
     <DropdownMenu>

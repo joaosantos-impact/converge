@@ -2,10 +2,11 @@
 
 import { useState, useMemo } from "react";
 import { signUp } from "@/lib/auth-client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SocialSignInButtons } from "./SocialSignInButtons";
 
 interface PasswordStrength {
   score: number; // 0-4
@@ -29,12 +30,15 @@ function getPasswordStrength(password: string): PasswordStrength {
 
 export function SignUpForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<string | null>(null);
 
   const strength = useMemo(() => 
     password.length > 0 ? getPasswordStrength(password) : null
@@ -96,6 +100,23 @@ export function SignUpForm() {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 w-full">
+      <SocialSignInButtons
+        callbackUrl={callbackUrl}
+        disabled={isLoading}
+        onError={setError}
+        socialLoading={socialLoading}
+        onSocialLoadingChange={setSocialLoading}
+      />
+
+      <div className="relative">
+        <div className="absolute inset-0 flex items-center">
+          <span className="w-full border-t border-white/10" />
+        </div>
+        <div className="relative flex justify-center text-xs uppercase">
+          <span className="bg-[#050505] px-2 text-white/35">ou</span>
+        </div>
+      </div>
+
       <div className="space-y-2">
         <Label htmlFor="name" className="text-sm font-medium">Nome</Label>
         <Input

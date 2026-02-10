@@ -3,7 +3,7 @@
   "name": "Converge - Crypto Portfolio Tracker",
   "short_name": "Converge",
   "description": "Acompanha e gere o teu portfolio crypto em múltiplas exchanges",
-  "start_url": "/dashboard",
+  "start_url": "/dashboard/portfolio",
   "scope": "/",
   "display": "standalone",
   "background_color": "#09090b",

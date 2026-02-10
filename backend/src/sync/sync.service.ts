@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CcxtService } from '../exchanges/ccxt.service';
 
 const SYNC_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
+const STALE_RUNNING_MS = 10 * 60 * 1000; // 10 min — treat orphaned "running" as failed
 
 // Common base assets for first sync — ensures we fetch trades for sold-out positions
 // (on first sync we have no previouslyTradedAssets, so we'd miss symbols not in balance)
@@ -31,10 +32,26 @@ export class SyncService {
    * Check sync status for a user.
    */
   async getSyncStatus(userId: string) {
-    const lastSync = await this.prisma.syncLog.findFirst({
+    let lastSync = await this.prisma.syncLog.findFirst({
       where: { userId },
       orderBy: { startedAt: 'desc' },
     });
+
+    // Fix orphaned "running" logs (e.g. process crashed before updating)
+    if (
+      lastSync?.status === 'running' &&
+      Date.now() - lastSync.startedAt.getTime() > STALE_RUNNING_MS
+    ) {
+      lastSync = await this.prisma.syncLog.update({
+        where: { id: lastSync.id },
+        data: {
+          status: 'failed',
+          finishedAt: new Date(),
+          synced: 0,
+          failed: 1,
+        },
+      });
+    }
 
     const canSync =
       !lastSync ||
@@ -95,82 +112,100 @@ export class SyncService {
       data: { userId, status: 'running' },
     });
 
-    const accounts = await this.prisma.exchangeAccount.findMany({
-      where: { userId, isActive: true },
-    });
-
-    if (accounts.length === 0) {
+    const markCompleted = async (
+      synced: number,
+      failed: number,
+      totalValue = 0,
+    ) => {
       await this.prisma.syncLog.update({
         where: { id: syncLog.id },
         data: {
           status: 'completed',
           finishedAt: new Date(),
-          synced: 0,
-          failed: 0,
+          synced,
+          failed,
         },
       });
-      return { success: true, synced: 0, failed: 0, totalValue: 0 };
-    }
+    };
 
-    let successful = 0;
-    let failed = 0;
+    const markFailed = async (err: unknown) => {
+      this.logger.error('Sync failed:', err);
+      await this.prisma.syncLog.update({
+        where: { id: syncLog.id },
+        data: {
+          status: 'failed',
+          finishedAt: new Date(),
+          synced: 0,
+          failed: 1,
+        },
+      });
+    };
 
-    for (const account of accounts) {
-      try {
-        await this.syncAccount(account);
-        successful++;
-      } catch (err) {
-        this.logger.error(`Sync failed for ${account.name}:`, err);
-        failed++;
+    try {
+      const accounts = await this.prisma.exchangeAccount.findMany({
+        where: { userId, isActive: true },
+      });
+
+      if (accounts.length === 0) {
+        await markCompleted(0, 0);
+        return { success: true, synced: 0, failed: 0, totalValue: 0 };
       }
-    }
 
-    // Create portfolio snapshot
-    const totalUsdValue = await this.calculateTotalValue(userId);
+      let successful = 0;
+      let failed = 0;
 
-    const previousSnapshot = await this.prisma.portfolioSnapshot.findFirst({
-      where: {
-        userId,
-        timestamp: { lte: new Date(Date.now() - 60 * 60 * 1000) },
-      },
-      orderBy: { timestamp: 'desc' },
-    });
+      for (const account of accounts) {
+        try {
+          await this.syncAccount(account);
+          successful++;
+        } catch (err) {
+          this.logger.error(`Sync failed for ${account.name}:`, err);
+          failed++;
+        }
+      }
 
-    const totalPnl = previousSnapshot
-      ? totalUsdValue - previousSnapshot.totalUsdValue
-      : 0;
-    const totalPnlPercent =
-      previousSnapshot && previousSnapshot.totalUsdValue > 0
-        ? ((totalUsdValue - previousSnapshot.totalUsdValue) /
-            previousSnapshot.totalUsdValue) *
-          100
+      // Create portfolio snapshot
+      const totalUsdValue = await this.calculateTotalValue(userId);
+
+      const previousSnapshot = await this.prisma.portfolioSnapshot.findFirst({
+        where: {
+          userId,
+          timestamp: { lte: new Date(Date.now() - 60 * 60 * 1000) },
+        },
+        orderBy: { timestamp: 'desc' },
+      });
+
+      const totalPnl = previousSnapshot
+        ? totalUsdValue - previousSnapshot.totalUsdValue
         : 0;
+      const totalPnlPercent =
+        previousSnapshot && previousSnapshot.totalUsdValue > 0
+          ? ((totalUsdValue - previousSnapshot.totalUsdValue) /
+              previousSnapshot.totalUsdValue) *
+            100
+          : 0;
 
-    await this.prisma.portfolioSnapshot.create({
-      data: { userId, totalUsdValue, totalPnl, totalPnlPercent },
-    });
+      await this.prisma.portfolioSnapshot.create({
+        data: { userId, totalUsdValue, totalPnl, totalPnlPercent },
+      });
 
-    await this.prisma.syncLog.update({
-      where: { id: syncLog.id },
-      data: {
-        status: 'completed',
-        finishedAt: new Date(),
+      await markCompleted(successful, failed);
+
+      // Fire-and-forget cleanup
+      this.cleanupUserData(userId).catch((err) =>
+        this.logger.error(`Cleanup failed for user ${userId}:`, err),
+      );
+
+      return {
+        success: true,
         synced: successful,
         failed,
-      },
-    });
-
-    // Fire-and-forget cleanup
-    this.cleanupUserData(userId).catch((err) =>
-      this.logger.error(`Cleanup failed for user ${userId}:`, err),
-    );
-
-    return {
-      success: true,
-      synced: successful,
-      failed,
-      totalValue: totalUsdValue,
-    };
+        totalValue: totalUsdValue,
+      };
+    } catch (err) {
+      await markFailed(err);
+      throw err;
+    }
   }
 
   /**
@@ -180,15 +215,32 @@ export class SyncService {
   async syncAccount(account: any) {
     const exchange = this.ccxt.createExchangeFromAccount(account);
 
+    const loadMarketsWithRetry = async (attempts = 3) => {
+      for (let i = 0; i < attempts; i++) {
+        try {
+          await exchange.loadMarkets();
+          return;
+        } catch (err) {
+          if (i === attempts - 1) throw err;
+          const delay = (i + 1) * 2000;
+          this.logger.warn(
+            `loadMarkets failed (attempt ${i + 1}/${attempts}), retrying in ${delay / 1000}s...`,
+          );
+          await new Promise((r) => setTimeout(r, delay));
+        }
+      }
+    };
+
     try {
-      await exchange.loadMarkets();
+      await loadMarketsWithRetry();
     } catch (marketError) {
+      const msg = marketError instanceof Error ? marketError.message : String(marketError);
       this.logger.error(
         `Failed to load markets for ${account.exchange}:`,
         marketError,
       );
       throw new Error(
-        `Cannot connect to ${account.exchange}: market data unavailable`,
+        `Cannot connect to ${account.exchange}: ${msg || 'market data unavailable'}`,
       );
     }
 
@@ -254,7 +306,7 @@ export class SyncService {
     // Incremental syncs: only fetch from last known trade
     const sinceTime = lastTrade
       ? lastTrade.timestamp.getTime() + 1
-      : Date.now() - 8 * 365 * 24 * 60 * 60 * 1000;
+      : Date.now() - 7 * 365 * 24 * 60 * 60 * 1000;
 
     // Include assets from: balances, previously traded, AND common assets
     // Common assets are ALWAYS included so we never miss sold-out positions (e.g. sold all ADA in March)
@@ -460,7 +512,7 @@ export class SyncService {
       }
     }
 
-    await this.globalCleanup();
+    await this.runGlobalCleanup();
 
     return { users: userIds.length, synced: totalSynced, failed: totalFailed };
   }
@@ -537,6 +589,11 @@ export class SyncService {
         where: { id: { in: syncLogs.map((l) => l.id) } },
       });
     }
+  }
+
+  /** Called by cron after enqueueing users (or after syncAllUsers). */
+  async runGlobalCleanup() {
+    return this.globalCleanup();
   }
 
   private async globalCleanup() {

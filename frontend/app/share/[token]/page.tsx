@@ -4,17 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import {
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
+import { D3PieChart, D3GroupedBarChart } from '@/components/charts';
 import { AssetIcon } from '@/components/AssetIcon';
 
 // Distinct palette for allocation pie — easy to differentiate on dark background
@@ -78,14 +68,18 @@ export default function SharePage() {
   const formatEUR = (value: number) =>
     new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value * 0.92);
 
-  // Top 5 assets for pie, rest grouped as "Outros"
-  const chartData = useMemo(() => {
+  const pieData = useMemo(() => {
     if (!data) return [];
     const alloc = data.portfolio.allocation;
-    if (alloc.length <= 6) return alloc.map(a => ({ name: a.asset, value: a.percent }));
-    const top = alloc.slice(0, 5);
+    if (alloc.length <= 6) return alloc.map((a, i) => ({ label: a.asset, value: a.percent, color: COLORS[i % COLORS.length] }));
+    const top = alloc.slice(0, 5).map((a, i) => ({ label: a.asset, value: a.percent, color: COLORS[i % COLORS.length] }));
     const rest = alloc.slice(5).reduce((s, a) => s + a.percent, 0);
-    return [...top.map(a => ({ name: a.asset, value: a.percent })), { name: 'Outros', value: rest }];
+    return [...top, { label: 'Outros', value: rest, color: COLORS[5] }];
+  }, [data]);
+
+  const barData = useMemo(() => {
+    if (!data?.tradeActivity?.length) return [];
+    return data.tradeActivity.map((d) => ({ label: d.date, buys: d.buys, sells: d.sells }));
   }, [data]);
 
   if (loading) {
@@ -177,41 +171,29 @@ export default function SharePage() {
 
         {/* Charts section */}
         <div className="grid gap-6 md:grid-cols-2 mb-10">
-          {/* Allocation Pie */}
-          {chartData.length > 0 && (
+          {pieData.length > 0 && (
             <div className="border border-white/10 p-6">
               <p className="text-[10px] text-white/40 uppercase tracking-widest mb-4">Alocação</p>
               <div className="flex items-center gap-6">
-                <div className="w-40 h-40">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={chartData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={45}
-                        outerRadius={70}
-                        paddingAngle={2}
-                        dataKey="value"
-                        stroke="none"
-                      >
-                        {chartData.map((_, index) => (
-                          <Cell key={index} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                    </PieChart>
-                  </ResponsiveContainer>
+                <div className="w-40 h-40 flex items-center justify-center">
+                  <D3PieChart
+                    data={pieData}
+                    width={160}
+                    height={160}
+                    innerRadius={45}
+                    formatValue={(v) => `${v.toFixed(1)}%`}
+                  />
                 </div>
                 <div className="space-y-2 flex-1">
-                  {chartData.map((item, i) => (
-                    <div key={item.name} className="flex items-center justify-between text-sm">
+                  {pieData.map((item, i) => (
+                    <div key={item.label} className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-2">
-                        {item.name !== 'Outros' ? (
-                          <AssetIcon symbol={item.name} size={20} className="shrink-0 [&_img]:rounded-none" />
+                        {item.label !== 'Outros' ? (
+                          <AssetIcon symbol={item.label} size={20} className="shrink-0 [&_img]:rounded-none" />
                         ) : (
                           <div className="w-5 h-5 shrink-0" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
                         )}
-                        <span className="text-white/70">{item.name}</span>
+                        <span className="text-white/70">{item.label}</span>
                       </div>
                       <span className="font-medium">{item.value.toFixed(1)}%</span>
                     </div>
@@ -221,42 +203,22 @@ export default function SharePage() {
             </div>
           )}
 
-          {/* Trade Activity */}
-          {data.tradeActivity.length > 0 && (
+          {barData.length > 0 && (
             <div className="border border-white/10 p-6">
               <p className="text-[10px] text-white/40 uppercase tracking-widest mb-4">
                 Atividade de Trading (90d)
               </p>
               <div className="h-40">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.tradeActivity} barGap={0} barCategoryGap="20%">
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.3)' }}
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(v: string) => {
-                        const d = new Date(v);
-                        return `${d.getDate()}/${d.getMonth() + 1}`;
-                      }}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis hide />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1a1a1a',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        borderRadius: 0,
-                        fontSize: 12,
-                        color: '#fff',
-                      }}
-                      labelFormatter={(v) => new Date(String(v)).toLocaleDateString('pt-PT')}
-                      formatter={(value) => [`$${Number(value).toFixed(0)}`, '']}
-                    />
-                    <Bar dataKey="buys" fill="rgba(255,255,255,0.6)" name="Compras" />
-                    <Bar dataKey="sells" fill="rgba(239,68,68,0.6)" name="Vendas" />
-                  </BarChart>
-                </ResponsiveContainer>
+                <D3GroupedBarChart
+                  data={barData}
+                  seriesKeys={['buys', 'sells']}
+                  seriesColors={{ buys: 'rgba(255,255,255,0.6)', sells: 'rgba(239,68,68,0.6)' }}
+                  height={160}
+                  formatLabel={(v) => {
+                    const d = new Date(v);
+                    return `${d.getDate()}/${d.getMonth() + 1}`;
+                  }}
+                />
               </div>
             </div>
           )}

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { SignUpForm } from "@/components/auth";
 import Link from "next/link";
 
@@ -25,7 +26,9 @@ export default function SignUpPage() {
             </div>
 
             {/* Form */}
-            <SignUpForm />
+            <Suspense fallback={<div className="h-64 animate-pulse bg-white/5 rounded" />}>
+              <SignUpForm />
+            </Suspense>
 
             {/* Footer */}
             <p className="text-sm text-white/30">

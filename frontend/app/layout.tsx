@@ -96,7 +96,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="mobile-web-app-capable" content="yes" />
       </head>
-      <body className="min-h-screen font-sans antialiased">
+      <body className="min-h-screen font-sans antialiased" suppressHydrationWarning>
         <Providers>
           {children}
           <Toaster />

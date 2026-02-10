@@ -1,0 +1,1 @@
+export const SYNC_QUEUE_SERVICE = 'SYNC_QUEUE_SERVICE';

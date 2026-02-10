@@ -6,21 +6,17 @@ import { useQueryClient } from '@tanstack/react-query';
 /**
  * Auto-sync hook — lightweight client-side sync coordinator.
  *
- * Architecture:
- * - The HEAVY sync work is done server-side by the Vercel Cron job (/api/cron/sync)
- *   which runs every 5 minutes and syncs all users automatically.
+ * - The HEAVY sync work is done server-side by the cron job (/api/cron/sync)
+ *   which runs every 8 hours and syncs all users automatically.
  *
- * - This client hook serves two purposes:
- *   1. Shows sync status to the user (when server cron is running)
- *   2. Triggers a manual sync when the user returns to the app after being away
- *      (in case the cron hasn't caught their latest trades yet)
+ * - This hook shows sync status to the user (when server cron or manual sync is running)
+ *   and exposes triggerSync() for the manual "Sincronizar" button.
  *
- * - On tab visibility change: checks if a sync happened recently.
- *   If not (>5 min), triggers one sync. This ensures the user always sees
- *   fresh data when they open the dashboard, without polling aggressively.
+ * - No auto-trigger on tab visibility change or initial load — sync only via
+ *   manual button, cron, or when adding a new integration.
  */
 
-const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+const STALE_RUNNING_MS = 10 * 60 * 1000; // 10 min — if "running" older than this, treat as not syncing
 const CHECK_INTERVAL_MS = 15 * 1000; // Check sync status every 15s (faster to detect cron/running sync)
 const POLL_FAST_MS = 2 * 1000; // When pollFast (e.g. just added integration), poll every 2s
 const POLL_FAST_DURATION_MS = 90 * 1000; // … for 90s so we pick up "running" quickly
@@ -63,7 +59,10 @@ export function useAutoSync(options?: { pollFast?: boolean }) {
       const data = await res.json();
 
       const syncDate = data.lastSync?.startedAt ? new Date(data.lastSync.startedAt) : null;
-      const isRunning = data.lastSync?.status === 'running';
+      const rawRunning = data.lastSync?.status === 'running';
+      // Ignore stale "running" (backend should fix, but safeguard against orphaned logs)
+      const startedAt = data.lastSync?.startedAt ? new Date(data.lastSync.startedAt).getTime() : 0;
+      const isRunning = rawRunning && Date.now() - startedAt < STALE_RUNNING_MS;
       setState(prev => ({
         ...prev,
         lastSyncAt: syncDate ?? prev.lastSyncAt,
@@ -110,47 +109,6 @@ export function useAutoSync(options?: { pollFast?: boolean }) {
     }
   }, [queryClient, checkStatus]);
 
-  // Trigger a sync only if data is stale — reads from ref, not state
-  const syncIfStale = useCallback(async () => {
-    if (syncingRef.current) return;
-
-    const lastSync = lastSyncRef.current;
-    const timeSinceSync = lastSync
-      ? Date.now() - lastSync.getTime()
-      : Infinity;
-
-    if (timeSinceSync < STALE_THRESHOLD_MS) return; // Still fresh
-
-    syncingRef.current = true;
-    setState(prev => ({ ...prev, syncing: true, error: null }));
-
-    try {
-      const res = await fetch('/api/sync', { method: 'POST' });
-
-      if (!mountedRef.current) return;
-
-      if (res.ok) {
-        setState(prev => ({
-          ...prev,
-          syncing: false,
-          lastSyncAt: new Date(),
-        }));
-      } else if (res.status === 429) {
-        // Rate limited — server cron probably already synced
-        setState(prev => ({ ...prev, syncing: false }));
-        checkStatus();
-      } else {
-        setState(prev => ({ ...prev, syncing: false, error: 'Sync failed' }));
-      }
-    } catch {
-      if (mountedRef.current) {
-        setState(prev => ({ ...prev, syncing: false, error: 'Network error' }));
-      }
-    } finally {
-      syncingRef.current = false;
-    }
-  }, [checkStatus]);
-
   // Setup: runs once on mount, stable dependencies
   useEffect(() => {
     mountedRef.current = true;
@@ -158,17 +116,9 @@ export function useAutoSync(options?: { pollFast?: boolean }) {
     // Check status immediately (important when just added integration so we show "syncing" soon)
     checkStatus();
 
-    // After initial status check, trigger sync if stale (with delay to not block UI)
-    const initialTimer = setTimeout(() => {
-      syncIfStale();
-    }, 3000);
-
-    // When tab becomes visible after being hidden, sync if stale
+    // When tab becomes visible, refresh status (no auto-sync)
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        checkStatus();
-        setTimeout(syncIfStale, 1000);
-      }
+      if (document.visibilityState === 'visible') checkStatus();
     };
     document.addEventListener('visibilitychange', handleVisibility);
 
@@ -182,7 +132,6 @@ export function useAutoSync(options?: { pollFast?: boolean }) {
         slowInterval = setInterval(checkStatus, CHECK_INTERVAL_MS);
       }, POLL_FAST_DURATION_MS);
       return () => {
-        clearTimeout(initialTimer);
         clearTimeout(switchTimer);
         clearInterval(interval);
         if (slowInterval) clearInterval(slowInterval);
@@ -193,12 +142,11 @@ export function useAutoSync(options?: { pollFast?: boolean }) {
 
     return () => {
       mountedRef.current = false;
-      clearTimeout(initialTimer);
       clearInterval(interval);
       if (slowInterval) clearInterval(slowInterval);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [checkStatus, syncIfStale]);
+  }, [checkStatus]);
 
   return { ...state, triggerSync };
 }

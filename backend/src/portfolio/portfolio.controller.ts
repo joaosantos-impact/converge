@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Param,
   Query,
   UseGuards,
   HttpException,
@@ -13,6 +14,7 @@ import { z } from 'zod';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import { TradesService } from '../trades/trades.service';
 
 const rangeSchema = z.object({
   range: z.enum(['24h', '7d', '30d', '90d', '1y', 'all']).default('7d'),
@@ -22,7 +24,100 @@ const rangeSchema = z.object({
 export class PortfolioController {
   private readonly logger = new Logger(PortfolioController.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tradesService: TradesService,
+  ) {}
+
+  /**
+   * Asset stats with P&L computed in backend.
+   * P&L = (valor atual + total vendas) - total compras
+   */
+  @Get('asset/:asset')
+  @UseGuards(AuthGuard)
+  async getAssetStats(
+    @CurrentUser() user: any,
+    @Param('asset') assetParam: string,
+    @Res() res: Response,
+  ) {
+    const asset = (assetParam || '').trim().toUpperCase();
+    if (!asset) {
+      throw new HttpException('Asset inválido', HttpStatus.BAD_REQUEST);
+    }
+
+    const accounts = await this.prisma.exchangeAccount.findMany({
+      where: { userId: user.id, isActive: true },
+      select: { id: true, exchange: true },
+    });
+
+    if (accounts.length === 0) {
+      return res.json({
+        asset,
+        totalAmount: 0,
+        totalValue: 0,
+        totalBuyCost: 0,
+        totalSellRevenue: 0,
+        avgCost: 0,
+        pnl: 0,
+        pnlPercent: 0,
+        exchanges: [],
+        exchangeBreakdown: [],
+        tradeCount: 0,
+      });
+    }
+
+    const accountMap = new Map(accounts.map((a) => [a.id, a.exchange]));
+    const accountIds = accounts.map((a) => a.id);
+
+    const [balances, assetStats] = await Promise.all([
+      this.prisma.balance.findMany({
+        where: {
+          exchangeAccountId: { in: accountIds },
+          asset,
+          total: { gt: 0 },
+        },
+        select: { asset: true, total: true, usdValue: true, exchangeAccountId: true },
+      }),
+      this.tradesService.getAssetStats(user.id, asset),
+    ]);
+
+    const totalAmount = balances.reduce((s, b) => s + b.total, 0);
+    const totalValue = balances.reduce((s, b) => s + b.usdValue, 0);
+
+    const exchangeBreakdown = balances.map((b) => ({
+      exchange: accountMap.get(b.exchangeAccountId) || '',
+      amount: b.total,
+      usdValue: b.usdValue,
+    }));
+
+    const exchanges = [...new Set(exchangeBreakdown.map((e) => e.exchange).filter(Boolean))];
+
+    const { totalBuyCost, totalSellRevenue, totalAmountBought, tradeCount } = assetStats;
+
+    // P&L = soma vendas + valor posição atual - soma compras
+    const pnl = totalSellRevenue + totalValue - totalBuyCost;
+
+    // Custo base = média (total compras / total unidades compradas)
+    const avgCost = totalAmountBought > 0 ? totalBuyCost / totalAmountBought : 0;
+    const costBasisForRoi = totalBuyCost > 0 ? totalBuyCost : 1;
+    const pnlPercent = costBasisForRoi > 0 ? (pnl / costBasisForRoi) * 100 : 0;
+
+    res.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
+
+    return res.json({
+      asset,
+      totalAmount,
+      totalValue,
+      totalBuyCost,
+      totalSellRevenue,
+      avgCost,
+      pnl,
+      pnlPercent,
+      exchanges,
+      exchangeBreakdown,
+      tradeCount,
+    });
+  }
 
   @Get()
   @UseGuards(AuthGuard)

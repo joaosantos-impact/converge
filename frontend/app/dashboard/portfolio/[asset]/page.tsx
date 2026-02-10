@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useSession } from '@/lib/auth-client';
 import { useCurrency } from '@/app/providers';
-import { usePortfolio } from '@/hooks/use-portfolio';
+import { useAssetStats } from '@/hooks/use-asset-stats';
 import { useTrades } from '@/hooks/use-trades';
 import { useLivePrices } from '@/lib/price-service';
 import type { TradeData } from '@/lib/types';
@@ -36,62 +36,51 @@ const TIME_RANGE_CONFIG: Record<TimeRange, { days: number; interval: string; lab
   '30d': { days: 30, interval: '4h', label: '1M' },
   '90d': { days: 90, interval: '1d', label: '3M' },
   '1y': { days: 365, interval: '1d', label: '1A' },
-  'all': { days: 730, interval: '1d', label: 'Max' },
+  'all': { days: 1825, interval: '1d', label: 'Max' }, // 5 anos
 };
 
 export default function AssetDetailPage() {
   const params = useParams();
   const asset = (params.asset as string)?.toUpperCase();
   const { data: session, isPending } = useSession();
-  const { formatValue } = useCurrency();
+  const { formatValue, formatPrice, formatChartValue } = useCurrency();
   const router = useRouter();
   
   const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
   const [chartLoading, setChartLoading] = useState(true);
   const [timeRange, setTimeRange] = useState<TimeRange>('90d');
 
-  // Fetch the specific asset from the backend (search by name)
-  const { data: portfolioData, isLoading: portfolioLoading } = usePortfolio({ search: asset, perPage: 1 });
-  const { data: tradesData, isLoading: tradesLoading } = useTrades(730, asset);
-  const loading = portfolioLoading || tradesLoading;
+  const { data: assetStats, isLoading: assetStatsLoading } = useAssetStats(asset);
+  const { data: tradesData, isLoading: tradesLoading } = useTrades(1825, asset, 10000);
+  const loading = assetStatsLoading || tradesLoading;
 
   const { prices: livePrices } = useLivePrices(asset ? [asset] : []);
   const liveData = livePrices.get(asset);
   const livePrice = liveData?.price;
 
-  // Compute derived data from React Query results
-  const { totalAmount, totalValue, exchanges, trades, totalCost } = useMemo(() => {
-    if (!portfolioData || !tradesData) {
-      return { totalAmount: 0, totalValue: 0, exchanges: [] as ExchangeBreakdown[], trades: [] as TradeData[], totalCost: 0 };
-    }
+  const trades = (tradesData?.trades || []) as TradeData[];
 
-    // Find the aggregated asset (backend already aggregates + filters by search)
-    const entry = portfolioData.balances?.find((b) => b.asset === asset);
+  const {
+    totalAmount = 0,
+    totalValue = 0,
+    totalBuyCost = 0,
+    avgCost = 0,
+    pnl = 0,
+    pnlPercent = 0,
+  } = assetStats ?? {};
 
-    const total = entry?.totalAmount ?? 0;
-    const totalVal = entry?.totalValue ?? 0;
-
-    // Build exchange breakdown from the backend's per-exchange data
-    const exchangeList: ExchangeBreakdown[] = (entry?.exchangeBreakdown ?? []).map((eb) => ({
-      exchange: eb.exchange || 'Desconhecido',
-      amount: eb.amount,
-      usdValue: eb.usdValue,
-      percent: totalVal > 0 ? (eb.usdValue / totalVal) * 100 : 0,
-    })).sort((a, b) => b.usdValue - a.usdValue);
-
-    const allTrades = tradesData.trades || [];
-    const buyCost = allTrades
-      .filter((t: TradeData) => t.side === 'buy')
-      .reduce((sum: number, t: TradeData) => sum + t.cost, 0);
-
-    return {
-      totalAmount: total,
-      totalValue: totalVal,
-      exchanges: exchangeList,
-      trades: allTrades,
-      totalCost: buyCost,
-    };
-  }, [portfolioData, tradesData, asset]);
+  const exchanges: ExchangeBreakdown[] = useMemo(() => {
+    const breakdown = assetStats?.exchangeBreakdown ?? [];
+    const totalVal = assetStats?.totalValue ?? 0;
+    return breakdown
+      .map((eb) => ({
+        exchange: eb.exchange || 'Desconhecido',
+        amount: eb.amount,
+        usdValue: eb.usdValue,
+        percent: totalVal > 0 ? (eb.usdValue / totalVal) * 100 : 0,
+      }))
+      .sort((a, b) => b.usdValue - a.usdValue);
+  }, [assetStats?.exchangeBreakdown, assetStats?.totalValue]);
 
   useEffect(() => {
     if (isPending) return;
@@ -122,14 +111,14 @@ export default function AssetDetailPage() {
     }
   };
 
-  // Trade markers for PremiumChart
+  // Trade markers for PremiumChart — inclui cost e amount para tooltip
   const chartMarkers = useMemo(() => {
     if (!priceHistory.length || !trades.length) return [];
     
     const chartStart = new Date(priceHistory[0].timestamp).getTime();
     const chartEnd = new Date(priceHistory[priceHistory.length - 1].timestamp).getTime();
     
-    const markers: Array<{ timestamp: string; value: number; type: 'buy' | 'sell'; label?: string }> = [];
+    const markers: Array<{ timestamp: string; value: number; type: 'buy' | 'sell'; label?: string; cost?: number; amount?: number }> = [];
     
     for (const trade of trades) {
       const tradeTime = new Date(trade.timestamp).getTime();
@@ -140,19 +129,21 @@ export default function AssetDetailPage() {
         value: trade.price,
         type: trade.side === 'buy' ? 'buy' : 'sell',
         label: `${trade.side === 'buy' ? 'C' : 'V'} ${trade.amount.toFixed(4)}`,
+        cost: trade.cost,
+        amount: trade.amount,
       });
     }
     
     return markers;
   }, [priceHistory, trades]);
 
+  // Preço máximo no período (para mostrar no header)
+  const maxPriceInPeriod = useMemo(() => {
+    if (!priceHistory.length) return 0;
+    return Math.max(...priceHistory.map((p) => p.close));
+  }, [priceHistory]);
+
   const pricePerUnit = totalAmount > 0 ? totalValue / totalAmount : 0;
-  const buyTrades = trades.filter(t => t.side === 'buy');
-  const avgCost = buyTrades.length > 0
-    ? totalCost / buyTrades.reduce((s, t) => s + t.amount, 0)
-    : 0;
-  const pnl = totalValue - totalCost;
-  const pnlPercent = totalCost > 0 ? ((totalValue - totalCost) / totalCost) * 100 : 0;
 
   // Price change over chart period
   const firstPrice = priceHistory.length > 0 ? priceHistory[0].close : 0;
@@ -217,9 +208,14 @@ export default function AssetDetailPage() {
           <div className="flex items-center gap-4">
             <p className="text-xs font-medium">Preço</p>
             {!chartLoading && priceHistory.length > 0 && (
-              <span className={`text-xs ${periodChange >= 0 ? 'text-foreground' : 'text-red-500'}`}>
-                {periodChange >= 0 ? '+' : ''}{periodChange.toFixed(2)}%
-              </span>
+              <div className="flex items-center gap-3">
+                <span className={`text-xs ${periodChange >= 0 ? 'text-foreground' : 'text-red-500'}`}>
+                  {periodChange >= 0 ? '+' : ''}{periodChange.toFixed(2)}%
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  Max {formatChartValue(maxPriceInPeriod)}
+                </span>
+              </div>
             )}
           </div>
           <div className="flex items-center gap-4">
@@ -265,9 +261,10 @@ export default function AssetDetailPage() {
             <PremiumChart
               data={priceHistory.map(p => ({ timestamp: p.timestamp, value: p.close }))}
               height={340}
-              formatValue={formatValue}
+              formatValue={formatChartValue}
               markers={chartMarkers}
               timeRange={timeRange}
+              hideMaxInChart
             />
           )}
         </div>
@@ -281,8 +278,8 @@ export default function AssetDetailPage() {
           <p className="text-[10px] text-muted-foreground mt-0.5">{totalAmount.toLocaleString(undefined, { maximumFractionDigits: 6 })} {asset}</p>
         </div>
         <div className="px-4 py-3 border border-border bg-card">
-          <p className="text-[9px] text-muted-foreground uppercase tracking-widest leading-none">Custo Base</p>
-          <p className="text-lg font-medium mt-1 leading-tight">{formatValue(totalCost)}</p>
+          <p className="text-[9px] text-muted-foreground uppercase tracking-widest leading-none">Total Investido</p>
+          <p className="text-lg font-medium mt-1 leading-tight">{formatValue(totalBuyCost)}</p>
           <p className="text-[10px] text-muted-foreground mt-0.5">avg {formatValue(avgCost)}/un</p>
         </div>
         <div className="px-4 py-3 border border-border bg-card">
@@ -347,7 +344,7 @@ export default function AssetDetailPage() {
         <div className="border border-border bg-card">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <p className="text-xs font-medium">Trades</p>
-            <Link href="/dashboard/history" className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">
+            <Link href={`/dashboard/history?asset=${asset}`} className="text-[10px] text-muted-foreground hover:text-foreground transition-colors">
               Ver todas
             </Link>
           </div>
@@ -357,10 +354,10 @@ export default function AssetDetailPage() {
             ) : (
               trades.slice(0, 20).map((trade, i) => (
                 <div key={trade.id || i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-muted/50 transition-colors">
-                  <div className={`w-0.5 h-8 shrink-0 ${trade.side === 'buy' ? 'bg-foreground' : 'bg-red-500'}`} />
+                  <div className="w-0.5 h-8 shrink-0 bg-foreground" />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <span className={`text-[10px] font-medium ${trade.side === 'buy' ? 'text-foreground' : 'text-red-500'}`}>
+                      <span className="text-[10px] font-medium text-foreground">
                         {trade.side === 'buy' ? 'COMPRA' : 'VENDA'}
                       </span>
                       <span className="text-[10px] text-muted-foreground">{trade.exchange}</span>
@@ -371,7 +368,7 @@ export default function AssetDetailPage() {
                   </div>
                   <div className="text-right">
                     <p className="text-xs">{trade.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}</p>
-                    <p className="text-[10px] text-muted-foreground">@ {formatValue(trade.price)}</p>
+                    <p className="text-[10px] text-muted-foreground">@ {formatPrice(trade.price)}</p>
                   </div>
                   <div className="text-right min-w-16">
                     {trade.pnl !== null ? (

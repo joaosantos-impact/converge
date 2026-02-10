@@ -14,6 +14,9 @@ export interface TradesResponse {
   truncated?: number;
   stats?: {
     totalPnl: number;
+    totalBuyCost: number;
+    totalSellRevenue: number;
+    totalFees: number;
     wins: number;
     losses: number;
     winRate: number;
@@ -26,6 +29,7 @@ export interface TradesResponse {
 
 interface TradesParams {
   days?: number;
+  year?: number | 'all';
   symbol?: string;
   search?: string;
   side?: string;
@@ -38,6 +42,7 @@ interface TradesParams {
 async function fetchTrades(params: TradesParams = {}): Promise<TradesResponse> {
   const sp = new URLSearchParams();
   if (params.days !== undefined && params.days !== null) sp.set('days', String(params.days));
+  if (params.year !== undefined && params.year !== null && params.year !== 'all') sp.set('year', String(params.year));
   if (params.symbol) sp.set('symbol', params.symbol);
   if (params.search) sp.set('search', params.search);
   if (params.side && params.side !== 'all') sp.set('side', params.side);
@@ -57,7 +62,7 @@ async function fetchTrades(params: TradesParams = {}): Promise<TradesResponse> {
 export function useTrades(days: number = 90, symbol?: string, limit?: number, params?: Omit<TradesParams, 'days' | 'symbol' | 'limit'>) {
   const fullParams: TradesParams = { days, symbol, limit, ...params };
   return useQuery({
-    queryKey: ['trades', days, symbol, limit, params?.search, params?.side, params?.exchange, params?.marketType, params?.page],
+    queryKey: ['trades', days, params?.year, symbol, limit, params?.search, params?.side, params?.exchange, params?.marketType, params?.page],
     queryFn: () => fetchTrades(fullParams),
     staleTime: 2 * 60 * 1000,
     gcTime: 10 * 60 * 1000,

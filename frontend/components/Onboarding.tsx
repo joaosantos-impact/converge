@@ -349,7 +349,7 @@ export function Onboarding({ userName, onComplete }: OnboardingProps) {
 
           {step === 'done' && (
             <Button onClick={onComplete} className="w-full h-10">
-              Ir para o Dashboard
+              Ver o meu portfolio
             </Button>
           )}
         </div>

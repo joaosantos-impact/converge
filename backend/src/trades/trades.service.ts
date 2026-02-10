@@ -5,6 +5,9 @@ export interface TradingStats {
   totalTrades: number;
   totalVolume: number;
   totalFees: number;
+  totalBuyCost: number;
+  totalSellRevenue: number;
+  totalPnl: number;
   winRate: number;
   profitableTrades: number;
   losingTrades: number;
@@ -35,6 +38,7 @@ export class TradesService {
     userId: string,
     opts: {
       days: number;
+      yearFilter: number | null;
       symbolFilter: string | null;
       sideFilter: string | null;
       exchangeFilter: string | null;
@@ -43,10 +47,10 @@ export class TradesService {
       limit: number;
     },
   ) {
-    const { days, symbolFilter, sideFilter, exchangeFilter, marketTypeFilter, page, limit } = opts;
+    const { days, yearFilter, symbolFilter, sideFilter, exchangeFilter, marketTypeFilter, page, limit } = opts;
 
     // Check cache (keyed without page/side/exchange filters — those are applied post-cache)
-    const cacheKey = `${userId}:${days}:${symbolFilter || 'all'}:${marketTypeFilter || 'all'}`;
+    const cacheKey = `v3:${userId}:${days}:${yearFilter ?? 'all'}:${symbolFilter || 'all'}:${marketTypeFilter || 'all'}`;
     const cached = this.statsCache.get(cacheKey);
     const now = Date.now();
 
@@ -95,14 +99,20 @@ export class TradesService {
       exchangeAccountId: { in: ids },
     };
 
-    // days=0 means "all time" — no date filter
-    if (days > 0) {
+    if (yearFilter != null) {
+      const yearStart = new Date(Date.UTC(yearFilter, 0, 1, 0, 0, 0, 0));
+      const yearEnd = new Date(Date.UTC(yearFilter + 1, 0, 1, 0, 0, 0, 0));
+      where.timestamp = { gte: yearStart, lt: yearEnd };
+    } else if (days > 0) {
       const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
       where.timestamp = { gte: startDate };
     }
 
     if (symbolFilter) {
-      where.symbol = { contains: symbolFilter };
+      where.OR = [
+        { symbol: { startsWith: `${symbolFilter}/` } },
+        { symbol: { equals: symbolFilter } },
+      ];
     }
 
     if (marketTypeFilter) {
@@ -134,7 +144,12 @@ export class TradesService {
       }),
     ]);
 
-    // Calculate P&L using average cost basis
+    // Build price map for fee conversion (fee can be in PEPE, BNB, etc.)
+    const fiatForPrices = trades.filter(
+      (t) => t.marketType === 'spot' && TradesService.isCostInUsd(t.symbol),
+    );
+    const priceMap = TradesService.buildPriceMap(fiatForPrices);
+
     const symbolPositions = new Map<
       string,
       { position: number; totalCost: number; avgPrice: number }
@@ -142,6 +157,14 @@ export class TradesService {
 
     const tradesWithPnl = trades.map((t) => {
       const symbol = t.symbol;
+      const useForPnl = t.marketType === 'spot' && TradesService.isCostInUsd(symbol);
+      const feeUsd = TradesService.feeToUsd(
+        t.fee ?? 0,
+        t.feeCurrency ?? 'USDT',
+        symbol,
+        t.price,
+        priceMap,
+      );
       const pos = symbolPositions.get(symbol) || {
         position: 0,
         totalCost: 0,
@@ -152,21 +175,23 @@ export class TradesService {
       let pnlPercent: number | null = null;
       let costBasis: number | null = null;
 
-      if (t.side === 'buy') {
-        pos.totalCost += t.cost;
-        pos.position += t.amount;
-        pos.avgPrice = pos.position > 0 ? pos.totalCost / pos.position : 0;
-      } else if (t.side === 'sell' && pos.position > 0) {
-        costBasis = pos.avgPrice * t.amount;
-        pnl = t.cost - costBasis - t.fee;
-        pnlPercent = costBasis > 0 ? (pnl / costBasis) * 100 : 0;
+      if (useForPnl) {
+        if (t.side === 'buy') {
+          pos.totalCost += t.cost + feeUsd;
+          pos.position += t.amount;
+          pos.avgPrice = pos.position > 0 ? pos.totalCost / pos.position : 0;
+        } else if (t.side === 'sell' && pos.position > 0) {
+          costBasis = pos.avgPrice * t.amount;
+          pnl = t.cost - feeUsd - costBasis;
+          pnlPercent = costBasis > 0 ? (pnl / costBasis) * 100 : 0;
 
-        pos.position -= t.amount;
-        if (pos.position > 0) {
-          pos.totalCost = pos.avgPrice * pos.position;
-        } else {
-          pos.totalCost = 0;
-          pos.avgPrice = 0;
+          pos.position -= t.amount;
+          if (pos.position > 0) {
+            pos.totalCost = pos.avgPrice * pos.position;
+          } else {
+            pos.totalCost = 0;
+            pos.avgPrice = 0;
+          }
         }
       }
 
@@ -197,6 +222,50 @@ export class TradesService {
     });
 
     const stats = this.calculateStats(tradesWithPnl);
+
+    // P&L simples: soma vendas + valor posição - soma compras (spot, moedas fiat)
+    const fiatTrades = trades.filter(
+      (t) => t.marketType === 'spot' && TradesService.isCostInUsd(t.symbol),
+    );
+    let totalBuyCost = 0;
+    let totalSellRevenue = 0;
+    let totalFeesUsd = 0;
+    for (const t of fiatTrades) {
+      const feeUsd = TradesService.feeToUsd(
+        t.fee ?? 0,
+        t.feeCurrency ?? 'USDT',
+        t.symbol,
+        t.price,
+        priceMap,
+      );
+      totalFeesUsd += feeUsd;
+      if (t.side === 'buy') totalBuyCost += t.cost + feeUsd;
+      else totalSellRevenue += t.cost - feeUsd;
+    }
+
+    const assets = new Set<string>();
+    for (const t of trades) {
+      const base = t.symbol.split('/')[0]?.split(':')[0]?.trim();
+      if (base) assets.add(base);
+    }
+    const assetList = Array.from(assets);
+    const balances = assetList.length > 0
+      ? await this.prisma.balance.findMany({
+          where: {
+            exchangeAccountId: { in: ids },
+            asset: { in: assetList },
+            total: { gt: 0 },
+          },
+          select: { usdValue: true },
+        })
+      : [];
+    const totalValue = balances.reduce((s, b) => s + b.usdValue, 0);
+    const totalPnl = totalSellRevenue + totalValue - totalBuyCost;
+
+    stats.totalBuyCost = totalBuyCost;
+    stats.totalSellRevenue = totalSellRevenue;
+    stats.totalPnl = totalPnl;
+    stats.totalFees = totalFeesUsd;
     tradesWithPnl.reverse(); // Most recent first
 
     if (total === 0 && trades.length === 0) {
@@ -297,12 +366,127 @@ export class TradesService {
       totalTrades: 0,
       totalVolume: 0,
       totalFees: 0,
+      totalBuyCost: 0,
+      totalSellRevenue: 0,
+      totalPnl: 0,
       winRate: 0,
       profitableTrades: 0,
       losingTrades: 0,
       bestTrade: 0,
       worstTrade: 0,
       averageProfit: 0,
+    };
+  }
+
+  private static readonly USD_QUOTES = ['USDT', 'USD', 'USDC', 'BUSD', 'DAI', 'TUSD', 'EUR'];
+  private static readonly STABLECOINS = new Set([
+    'USDT', 'USD', 'USDC', 'BUSD', 'DAI', 'TUSD', 'FDUSD', 'USDP', 'FRAX', 'EUR',
+  ]);
+
+  private static isCostInUsd(symbol: string): boolean {
+    const quote = symbol.split('/')[1];
+    return quote ? TradesService.USD_QUOTES.includes(quote.toUpperCase()) : false;
+  }
+
+  /** Build asset -> USD price map from fiat-pair trades (most recent price per asset) */
+  private static buildPriceMap(trades: { symbol: string; price: number }[]): Map<string, number> {
+    const m = new Map<string, number>();
+    const byTime = [...trades].reverse();
+    for (const t of byTime) {
+      const parts = t.symbol.split('/');
+      const base = parts[0]?.toUpperCase();
+      const quote = parts[1]?.split(':')[0]?.toUpperCase();
+      if (base && quote && TradesService.STABLECOINS.has(quote) && !m.has(base)) {
+        m.set(base, t.price);
+      }
+    }
+    return m;
+  }
+
+  /** Convert fee to USD — fee can be in PEPE, BNB, USDT, etc. */
+  private static feeToUsd(
+    fee: number,
+    feeCurrency: string,
+    symbol: string,
+    price: number,
+    priceMap: Map<string, number>,
+  ): number {
+    if (!fee || fee <= 0) return 0;
+    const fc = (feeCurrency || 'USDT').toUpperCase();
+    if (TradesService.STABLECOINS.has(fc)) return fee;
+    const p = priceMap.get(fc);
+    if (p != null) return fee * p;
+    const base = symbol.split('/')[0]?.toUpperCase();
+    if (base === fc) return fee * price;
+    return 0;
+  }
+
+  /**
+   * Asset stats — SIMPLE:
+   * - totalBuyCost = sum of all buy costs + fees (USD pairs only)
+   * - totalSellRevenue = sum of all sell costs - fees (USD pairs only)
+   * - P&L = totalSellRevenue + positionValue - totalBuyCost
+   * - avgCost = totalBuyCost / totalAmountBought (for avg per unit)
+   */
+  async getAssetStats(
+    userId: string,
+    asset: string,
+  ): Promise<{
+    totalBuyCost: number;
+    totalSellRevenue: number;
+    totalAmountBought: number;
+    tradeCount: number;
+  }> {
+    const accountIds = await this.prisma.exchangeAccount.findMany({
+      where: { userId },
+      select: { id: true },
+    });
+    if (accountIds.length === 0) {
+      return { totalBuyCost: 0, totalSellRevenue: 0, totalAmountBought: 0, tradeCount: 0 };
+    }
+
+    const ids = accountIds.map((a) => a.id);
+    const where = {
+      exchangeAccountId: { in: ids },
+      marketType: 'spot',
+      OR: [
+        { symbol: { startsWith: `${asset}/` } },
+        { symbol: { equals: asset } },
+      ],
+    };
+
+    const allTrades = await this.prisma.trade.findMany({
+      where,
+      select: { symbol: true, side: true, amount: true, cost: true, fee: true, feeCurrency: true, price: true },
+    });
+
+    const trades = allTrades.filter((t) => TradesService.isCostInUsd(t.symbol));
+    const assetPriceMap = TradesService.buildPriceMap(trades);
+    let totalBuyCost = 0;
+    let totalSellRevenue = 0;
+    let totalAmountBought = 0;
+
+    for (const t of trades) {
+      const feeUsd = TradesService.feeToUsd(
+        t.fee ?? 0,
+        t.feeCurrency ?? 'USDT',
+        t.symbol,
+        t.price,
+        assetPriceMap,
+      );
+      if (t.side === 'buy') {
+        totalBuyCost += t.cost + feeUsd;
+        totalAmountBought += t.amount;
+      } else {
+        totalSellRevenue += t.cost - feeUsd;
+      }
+    }
+
+    return {
+      totalBuyCost,
+      totalSellRevenue,
+      totalAmountBought,
+      tradeCount: allTrades.length,
     };
   }
 
@@ -336,6 +520,9 @@ export class TradesService {
       totalTrades: trades.length,
       totalVolume,
       totalFees,
+      totalBuyCost: 0,
+      totalSellRevenue: 0,
+      totalPnl: 0,
       winRate: totalSells > 0 ? (profitableTrades / totalSells) * 100 : 0,
       profitableTrades,
       losingTrades,

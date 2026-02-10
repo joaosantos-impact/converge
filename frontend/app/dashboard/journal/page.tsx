@@ -35,7 +35,7 @@ const STORAGE_KEY = 'converge-journal';
 
 export default function JournalPage() {
   const { data: session, isPending } = useSession();
-  const { formatValue } = useCurrency();
+  const { formatValue, formatPrice } = useCurrency();
   const router = useRouter();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
 
@@ -51,6 +51,12 @@ export default function JournalPage() {
 
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+
+  // Today's label for display (set in useEffect to avoid hydration mismatch)
+  const [todayLabel, setTodayLabel] = useState('');
+  useEffect(() => {
+    setTodayLabel(new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' }));
+  }, []);
 
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
@@ -188,7 +194,7 @@ export default function JournalPage() {
           <div className="px-5 py-4 border-b border-border">
             <p className="text-[9px] text-muted-foreground uppercase tracking-widest">Hoje</p>
             <p className="text-sm font-medium mt-0.5">
-              {new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' })}
+              {todayLabel || '\u00A0'}
             </p>
           </div>
           <div className="flex items-center gap-px">
@@ -258,11 +264,11 @@ export default function JournalPage() {
                             : 'border-border hover:border-border/80 hover:bg-muted/20'
                         }`}
                       >
-                        <div className={`w-1 h-8 shrink-0 ${trade.side === 'buy' ? 'bg-foreground' : 'bg-red-500'}`} />
+                        <div className="w-1 h-8 shrink-0 bg-foreground" />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-medium">{trade.symbol}</span>
-                            <span className={`text-[9px] px-1 py-0.5 ${trade.side === 'buy' ? 'bg-muted text-foreground' : 'bg-red-500/10 text-red-500'}`}>
+                            <span className="text-[9px] px-1 py-0.5 bg-muted text-foreground">
                               {trade.side === 'buy' ? 'COMPRA' : 'VENDA'}
                             </span>
                           </div>
@@ -273,7 +279,7 @@ export default function JournalPage() {
                         </div>
                         <div className="text-right shrink-0">
                           <p className="text-[11px]">{trade.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}</p>
-                          <p className="text-[10px] text-muted-foreground">@ {formatValue(trade.price)}</p>
+                          <p className="text-[10px] text-muted-foreground">@ {formatPrice(trade.price)}</p>
                         </div>
                         <div className={`w-5 h-5 border shrink-0 flex items-center justify-center transition-colors ${
                           isSelected ? 'bg-foreground border-foreground' : 'border-border'
@@ -360,9 +366,9 @@ export default function JournalPage() {
                       <div className="space-y-1">
                         {dayTrades.slice(0, 5).map((trade, i) => (
                           <div key={trade.id || i} className="flex items-center gap-3 p-2 bg-muted/30">
-                            <div className={`w-1 h-6 shrink-0 ${trade.side === 'buy' ? 'bg-foreground' : 'bg-red-500'}`} />
+                            <div className="w-1 h-6 shrink-0 bg-foreground" />
                             <span className="text-xs font-medium">{trade.symbol}</span>
-                            <span className={`text-[9px] ${trade.side === 'buy' ? 'text-foreground' : 'text-red-500'}`}>
+                            <span className="text-[9px] text-foreground">
                               {trade.side === 'buy' ? 'COMPRA' : 'VENDA'}
                             </span>
                             <span className="text-[10px] text-muted-foreground ml-auto">

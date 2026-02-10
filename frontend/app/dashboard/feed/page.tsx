@@ -25,7 +25,7 @@ import { FadeIn } from '@/components/animations';
 
 export default function FeedPage() {
   const { data: session, isPending } = useSession();
-  const { formatValue } = useCurrency();
+  const { formatValue, formatPrice } = useCurrency();
   const router = useRouter();
   const isMobile = useIsMobile();
   const [filter, setFilter] = useState<'all' | 'buys' | 'sells'>('all');
@@ -185,7 +185,7 @@ export default function FeedPage() {
                   </div>
                   <div className="text-right shrink-0">
                     <p className="text-[11px]">{trade.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}</p>
-                    <p className="text-[10px] text-muted-foreground">@ {formatValue(trade.price)}</p>
+                    <p className="text-[10px] text-muted-foreground">@ {formatPrice(trade.price)}</p>
                   </div>
                   {/* Check indicator */}
                   <div className={`w-5 h-5 border shrink-0 flex items-center justify-center transition-colors ${
@@ -342,7 +342,7 @@ export default function FeedPage() {
                       {trade.amount !== null && (
                         <div className="text-right">
                           <p className="text-xs">{trade.amount.toLocaleString(undefined, { maximumFractionDigits: 4 })}</p>
-                          {trade.price !== null && <p className="text-[10px] text-muted-foreground">@ {formatValue(trade.price)}</p>}
+                          {trade.price !== null && <p className="text-[10px] text-muted-foreground">@ {formatPrice(trade.price)}</p>}
                         </div>
                       )}
                     </div>

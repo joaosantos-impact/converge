@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { SignInForm } from "@/components/auth";
 import Link from "next/link";
 
@@ -25,7 +26,9 @@ export default function SignInPage() {
             </div>
 
             {/* Form */}
-            <SignInForm />
+            <Suspense fallback={<div className="h-64 animate-pulse bg-white/5 rounded" />}>
+              <SignInForm />
+            </Suspense>
 
             {/* Footer */}
             <p className="text-sm text-white/30">

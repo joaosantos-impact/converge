@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { Suspense, useEffect, useState, useMemo } from 'react';
+import { useSearchParams } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { TradeData } from '@/lib/types';
 import {
   Select,
   SelectContent,
@@ -18,55 +19,123 @@ import { useTrades } from '@/hooks/use-trades';
 import { useAutoSync } from '@/hooks/use-auto-sync';
 import { useExchangeAccounts } from '@/hooks/use-exchange-accounts';
 import { AssetIcon } from '@/components/AssetIcon';
+import { AssetFilterCombobox } from '@/components/AssetFilterCombobox';
 import { toast } from 'sonner';
 import { FadeIn } from '@/components/animations';
-import { PerformanceChart } from '@/components/PerformanceChart';
+import { getAvailableYears } from '@/lib/date-utils';
 
 const PER_PAGE = 20;
 
-export default function HistoryPage() {
+const STABLECOINS = new Set(['USDT', 'USDC', 'USD', 'BUSD', 'DAI', 'TUSD', 'FDUSD', 'USDP', 'FRAX', 'EUR']);
+
+function buildAssetPriceMap(trades: TradeData[]): Map<string, number> {
+  const m = new Map<string, number>();
+  const byTime = [...trades].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  );
+  for (const t of byTime) {
+    const parts = t.symbol.split('/');
+    const base = parts[0]?.toUpperCase();
+    const quote = parts[1]?.split(':')[0]?.toUpperCase();
+    if (base && quote && STABLECOINS.has(quote) && !m.has(base)) {
+      m.set(base, t.price);
+    }
+  }
+  return m;
+}
+
+/** Compact quantity for table: 159445203 → "159.4M"; smaller values stay readable */
+function formatQuantityCompact(amount: number): { display: string; full: string } {
+  const full = amount.toLocaleString(undefined, { maximumFractionDigits: 6 });
+  if (amount >= 1e9) return { display: `${(amount / 1e9).toFixed(1)}B`, full };
+  if (amount >= 1e6) return { display: `${(amount / 1e6).toFixed(1)}M`, full };
+  if (amount >= 1e5) return { display: `${(amount / 1e3).toFixed(0)}K`, full };
+  return { display: full, full };
+}
+
+/** Compact price for table: max 4 decimals to keep column narrow */
+function formatPriceCompact(price: number, formatPrice: (v: number) => string): { display: string; full: string } {
+  const full = formatPrice(price);
+  const abs = Math.abs(price);
+  if (abs > 0 && abs < 1e-4) {
+    return { display: price.toExponential(2), full };
+  }
+  const maxDecimals = abs >= 100 ? 2 : 4;
+  const suffix = full.includes('€') ? ' €' : full.includes('$') ? ' $' : '';
+  const display = price.toLocaleString(undefined, {
+    minimumFractionDigits: abs < 1 && abs > 0 ? Math.min(2, maxDecimals) : 0,
+    maximumFractionDigits: maxDecimals,
+  }) + suffix;
+  return { display, full };
+}
+
+function feeToUsd(trade: TradeData, priceMap: Map<string, number>): number {
+  const fee = trade.fee ?? 0;
+  if (fee <= 0) return 0;
+  const fc = (trade.feeCurrency || 'USDT').toUpperCase();
+  if (STABLECOINS.has(fc)) return fee;
+  const price = priceMap.get(fc);
+  if (price != null) return fee * price;
+  const [base] = (trade.symbol || '').split('/');
+  const baseNorm = base?.toUpperCase();
+  if (baseNorm === fc) return fee * trade.price;
+  return 0;
+}
+
+function HistoryPageContent() {
+  const searchParams = useSearchParams();
   const { isPending } = useSession();
-  const { formatValue } = useCurrency();
+  const { formatValue, formatPrice } = useCurrency();
   const { syncing } = useAutoSync();
   const { data: accounts = [] } = useExchangeAccounts();
   const showSyncing = syncing && accounts.length > 0;
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [filterAsset, setFilterAsset] = useState<string>(() => searchParams.get('asset') || 'all');
   const [filterType, setFilterType] = useState<'all' | 'buy' | 'sell'>('all');
   const [filterExchange, setFilterExchange] = useState<string>('all');
   const [filterMarketType, setFilterMarketType] = useState<'all' | 'spot' | 'future'>('all');
-  const [days, setDays] = useState('0'); // 0 = all time (shows all trades by default)
-  const [chartExpanded, setChartExpanded] = useState(true);
+  const availableYears = useMemo(() => getAvailableYears(), []);
+  const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
   const [page, setPage] = useState(1);
 
-  // Debounce search input
+  // Sync filterAsset from URL (e.g. when navigating from asset page "Ver todas")
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchQuery), 300);
-    return () => clearTimeout(t);
-  }, [searchQuery]);
+    const assetFromUrl = searchParams.get('asset');
+    if (assetFromUrl) {
+      setFilterAsset(assetFromUrl);
+    }
+  }, [searchParams]);
 
   // Reset to page 1 when filters change
   // eslint-disable-next-line react-hooks/set-state-in-effect -- reset pagination when filters change
-  useEffect(() => { setPage(1); }, [filterType, filterExchange, filterMarketType, debouncedSearch, days]);
+  useEffect(() => { setPage(1); }, [filterType, filterExchange, filterMarketType, filterAsset, selectedYear]);
+
+  const tradesParams = {
+    days: 0,
+    year: selectedYear,
+    search: filterAsset !== 'all' ? filterAsset : undefined,
+    side: filterType !== 'all' ? filterType : undefined,
+    exchange: filterExchange !== 'all' ? filterExchange : undefined,
+    marketType: filterMarketType !== 'all' ? filterMarketType : undefined,
+  };
 
   // Fetch trades from backend with server-side filters + pagination
   const { data: tradesData, isLoading: initialLoading, isFetching: fetching } = useTrades(
-    parseInt(days),
+    0,
     undefined,
     PER_PAGE,
-    {
-      search: debouncedSearch || undefined,
-      side: filterType !== 'all' ? filterType : undefined,
-      exchange: filterExchange !== 'all' ? filterExchange : undefined,
-      marketType: filterMarketType !== 'all' ? filterMarketType : undefined,
-      page,
-    },
+    { ...tradesParams, page },
   );
 
-  // Also fetch ALL trades (same filters, high limit) for chart + stats — cached separately
-  const { data: allTradesData } = useTrades(parseInt(days), undefined, 10000, {
+  // Fetch ALL trades for stats (with all filters)
+  const { data: allTradesData } = useTrades(0, undefined, 10000, {
+    ...tradesParams,
     page: 1,
-    marketType: filterMarketType !== 'all' ? filterMarketType : undefined,
+  });
+
+  // Fetch trades without asset filter to build asset dropdown
+  const { data: tradesForAssets } = useTrades(0, undefined, 5000, {
+    ...tradesParams,
+    page: 1,
   });
 
   const trades = useMemo(() => tradesData?.trades || [], [tradesData]);
@@ -75,47 +144,16 @@ export default function HistoryPage() {
   const exchanges = tradesData?.exchanges || [];
   const stats = allTradesData?.stats;
 
-  // Build cumulative invested capital for the chart
-  // Buys add to invested capital, sells subtract — always shows data when there are trades
-  const chartData = useMemo(() => {
-    const allTrades = allTradesData?.trades || [];
-    if (allTrades.length === 0) return [];
-
-    // allTrades come from backend most-recent-first, reverse for chronological
-    const chronological = [...allTrades].reverse();
-    let cumulativeInvested = 0;
-    const points: Array<{ timestamp: string; value: number }> = [];
-
-    for (const t of chronological) {
-      if (t.side === 'buy') {
-        cumulativeInvested += t.cost;
-      } else if (t.side === 'sell') {
-        cumulativeInvested -= t.cost;
-      }
-      points.push({
-        timestamp: new Date(t.timestamp).toISOString(),
-        value: Math.max(0, cumulativeInvested),
-      });
-    }
-
-    // Deduplicate by day for cleaner chart
-    const byDay = new Map<string, { timestamp: string; value: number }>();
-    for (const p of points) {
-      const dayKey = p.timestamp.slice(0, 10);
-      byDay.set(dayKey, p); // keep latest value per day
-    }
-    return Array.from(byDay.values());
-  }, [allTradesData]);
-
-  // Map days to chart time range
-  const chartTimeRange = useMemo(() => {
-    const d = parseInt(days);
-    if (d === 0) return 'all' as const;
-    if (d <= 30) return '30d' as const;
-    if (d <= 90) return '90d' as const;
-    if (d <= 365) return '1y' as const;
-    return 'all' as const;
-  }, [days]);
+  // Unique assets from all trades (for dropdown)
+  const availableAssets = useMemo(() => {
+    const allTrades = tradesForAssets?.trades || [];
+    const set = new Set<string>();
+    allTrades.forEach((t) => {
+      const base = t.symbol.split('/')[0]?.split(':')[0]?.trim() || t.symbol;
+      if (base) set.add(base);
+    });
+    return Array.from(set).sort();
+  }, [tradesForAssets]);
 
   // Stats from all trades
   const buyCount = stats?.totalTrades
@@ -123,13 +161,17 @@ export default function HistoryPage() {
     : (allTradesData?.trades || []).filter(t => t.side === 'buy').length;
   const sellCount = (stats?.profitableTrades || 0) + (stats?.losingTrades || 0);
   const totalVolume = stats?.totalVolume || 0;
-  const winRate = stats?.winRate !== undefined ? stats.winRate.toFixed(0) : '—';
-  const totalPnl = useMemo(() => {
+  const totalPnl = allTradesData?.stats?.totalPnl ?? 0;
+
+  const priceMap = useMemo(
+    () => buildAssetPriceMap(tradesForAssets?.trades || []),
+    [tradesForAssets?.trades],
+  );
+
+  const totalFees = useMemo(() => {
     const allTrades = allTradesData?.trades || [];
-    return allTrades.reduce((s, t) => s + (t.pnl || 0), 0);
-  }, [allTradesData]);
-  const pnlWins = stats?.profitableTrades || 0;
-  const pnlLosses = stats?.losingTrades || 0;
+    return allTrades.reduce((s, t) => s + feeToUsd(t, priceMap), 0);
+  }, [allTradesData?.trades, priceMap]);
 
   // Group current page trades by date
   interface GroupedTrades {
@@ -162,7 +204,7 @@ export default function HistoryPage() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `trades-${days}d.csv`;
+    link.download = `trades-${selectedYear === 'all' ? 'todos' : selectedYear}.csv`;
     link.click();
     toast.success('CSV exportado');
   };
@@ -198,130 +240,81 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="space-y-4 relative">
-      {/* Header */}
+    <div className="space-y-3 relative">
+      {/* Header — date/period top right like Portfolio/Taxes */}
       <FadeIn>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div>
-              <h1 className="text-lg font-medium tracking-tight">Trades</h1>
-              <p className="text-xs text-muted-foreground">{totalTrades} trades</p>
-            </div>
+            <h1 className="text-xl font-medium tracking-tight">Trades</h1>
             {fetching && (
               <div className="w-4 h-4 border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin" />
             )}
           </div>
-          <Button onClick={exportCSV} size="sm" variant="outline" className="h-8 text-xs" aria-label="Exportar trades para CSV">Exportar CSV</Button>
-        </div>
-      </FadeIn>
-
-      {/* Stats bar */}
-      <FadeIn delay={0.05}>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="px-4 py-3 bg-card border border-border">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-widest">Total</p>
-            <p className="text-lg font-medium mt-0.5 font-display">{allTradesData?.total || 0}</p>
-            <p className="text-[10px] text-muted-foreground">{buyCount}C · {sellCount}V</p>
-          </div>
-          <div className="px-4 py-3 bg-card border border-border">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-widest">P&L Realizado</p>
-            <p className={`text-lg font-medium mt-0.5 font-display ${totalPnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-              {totalPnl >= 0 ? '+' : ''}{formatValue(totalPnl)}
-            </p>
-          </div>
-          <div className="px-4 py-3 bg-card border border-border">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-widest">Win Rate</p>
-            <p className="text-lg font-medium mt-0.5 font-display">{winRate}%</p>
-            <p className="text-[10px] text-muted-foreground">{pnlWins}W/{pnlLosses}L</p>
-          </div>
-          <div className="px-4 py-3 bg-card border border-border">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-widest">Volume</p>
-            <p className="text-lg font-medium mt-0.5 font-display">{formatValue(totalVolume)}</p>
-          </div>
-        </div>
-      </FadeIn>
-
-      {/* P&L Performance Chart — same style as dashboard */}
-      <FadeIn delay={0.1}>
-        {chartData.length > 0 && (
-          <div className="border border-border bg-card">
-            <button
-              onClick={() => setChartExpanded(!chartExpanded)}
-              aria-expanded={chartExpanded}
-              aria-label="Expandir/fechar gráfico P&L"
-              className="w-full flex items-center justify-between px-4 py-3 border-b border-border hover:bg-muted/30 transition-colors cursor-pointer"
+          <div className="flex items-center gap-2 h-9">
+            <Select
+              value={selectedYear === 'all' ? 'all' : String(selectedYear)}
+              onValueChange={(v) => setSelectedYear(v === 'all' ? 'all' : parseInt(v, 10))}
             >
-              <div className="flex items-center gap-3">
-                <p className="text-xs font-medium">Capital Investido</p>
-                <span className="text-xs font-medium text-muted-foreground">
-                  {formatValue(chartData.length > 0 ? chartData[chartData.length - 1].value : 0)}
-                </span>
-              </div>
-              <svg
-                className={`w-4 h-4 text-muted-foreground transition-transform ${chartExpanded ? '' : '-rotate-90'}`}
-                viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
-            {chartExpanded && (
-              <div className="px-2 pb-2">
-                <PerformanceChart
-                  data={chartData}
-                  timeRange={chartTimeRange}
-                  height={220}
-                />
-              </div>
-            )}
+              <SelectTrigger className="min-w-[120px] h-9 [&_[data-slot=select-value]]:line-clamp-none">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os anos</SelectItem>
+                {availableYears.map((y) => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button onClick={exportCSV} size="sm" variant="outline" className="h-9 text-xs" aria-label="Exportar trades para CSV">
+              Exportar CSV
+            </Button>
           </div>
-        )}
+        </div>
       </FadeIn>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-2">
-        <div className="relative w-48">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-          <Input placeholder="Procurar par..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9" />
+      {/* Filters — full width */}
+      <FadeIn delay={0.03}>
+        <div className="flex flex-wrap items-center gap-2">
+          <AssetFilterCombobox
+              value={filterAsset}
+              onValueChange={setFilterAsset}
+              options={availableAssets}
+              placeholder="Todos os assets"
+            />
+            <Select value={filterType} onValueChange={(v) => setFilterType(v as 'all' | 'buy' | 'sell')}>
+              <SelectTrigger className="min-w-[100px] h-9"><SelectValue /></SelectTrigger>
+              <SelectContent className="!max-h-56 overflow-y-auto">
+                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="buy">Compras</SelectItem>
+                <SelectItem value="sell">Vendas</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filterMarketType} onValueChange={(v) => setFilterMarketType(v as 'all' | 'spot' | 'future')}>
+              <SelectTrigger className="min-w-[145px] h-9 [&_[data-slot=select-value]]:line-clamp-none"><SelectValue /></SelectTrigger>
+              <SelectContent className="!max-h-56 overflow-y-auto">
+                <SelectItem value="all">Spot + Futuros</SelectItem>
+                <SelectItem value="spot">Spot</SelectItem>
+                <SelectItem value="future">Futuros</SelectItem>
+              </SelectContent>
+            </Select>
+            {exchanges.length > 0 && (
+              <Select value={filterExchange} onValueChange={setFilterExchange}>
+                <SelectTrigger className="min-w-[110px] h-9"><SelectValue /></SelectTrigger>
+                <SelectContent className="!max-h-56 overflow-y-auto">
+                  <SelectItem value="all">Todas</SelectItem>
+                  {exchanges.map((ex) => (
+                    <SelectItem key={ex} value={ex}>{ex}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
         </div>
-        <Select value={filterType} onValueChange={(v) => setFilterType(v as 'all' | 'buy' | 'sell')}>
-          <SelectTrigger className="w-28"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas</SelectItem>
-            <SelectItem value="buy">Compras</SelectItem>
-            <SelectItem value="sell">Vendas</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={filterMarketType} onValueChange={(v) => setFilterMarketType(v as 'all' | 'spot' | 'future')}>
-          <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Spot + Futuros</SelectItem>
-            <SelectItem value="spot">Spot</SelectItem>
-            <SelectItem value="future">Futuros</SelectItem>
-          </SelectContent>
-        </Select>
-        {exchanges.length > 0 && (
-          <Select value={filterExchange} onValueChange={setFilterExchange}>
-            <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Todas</SelectItem>
-              {exchanges.map(ex => <SelectItem key={ex} value={ex}>{ex}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        )}
-        <Select value={days} onValueChange={setDays}>
-          <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="0">Desde sempre</SelectItem>
-            <SelectItem value="30">30 dias</SelectItem>
-            <SelectItem value="90">90 dias</SelectItem>
-            <SelectItem value="365">1 ano</SelectItem>
-            <SelectItem value="730">2 anos</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      </FadeIn>
 
-      {/* Trades list */}
-      <FadeIn delay={0.15}>
+      {/* Trades + Stats — stats align with first trade */}
+      <FadeIn delay={0.05}>
+        <div className="grid gap-4 lg:grid-cols-[1fr_220px] lg:items-start">
+          <div className="min-w-0 space-y-3">
         {groupedTrades.length === 0 ? (
           <div className="p-12 border border-border bg-card text-center">
             <p className="text-muted-foreground text-sm">Sem trades encontradas</p>
@@ -331,132 +324,167 @@ export default function HistoryPage() {
             {groupedTrades.map((group) => (
               <div key={group.date}>
                 <p className="text-[10px] font-medium text-muted-foreground mb-2 capitalize">{group.date}</p>
-                <div className="border border-border divide-y divide-border">
-                  {group.trades.map((trade, i) => (
-                    <div key={trade.id || i} className="flex items-center gap-3 p-3 bg-card hover:bg-muted/50 transition-colors">
-                      <div className={`w-0.5 h-10 shrink-0 ${trade.side === 'buy' ? 'bg-foreground' : 'bg-red-500'}`} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <AssetIcon symbol={trade.symbol.split('/')[0]?.split(':')[0] || trade.symbol.split('/')[0] || trade.symbol} size={20} />
-                          <span className="font-medium text-xs">{trade.symbol}</span>
-                          <span className={`text-[9px] px-1.5 py-0.5 ${trade.side === 'buy' ? 'bg-muted text-foreground' : 'bg-red-500/10 text-red-500'}`}>
-                            {trade.side === 'buy' ? 'COMPRA' : 'VENDA'}
-                          </span>
-                          {trade.marketType === 'future' && (
-                            <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                              FUTUROS
-                            </span>
-                          )}
-                          {trade.isDelisted && (
-                            <span
-                              className="text-[9px] px-1.5 py-0.5 bg-muted text-muted-foreground"
-                              title="Par deslistado da exchange"
-                            >
-                              DESLISTADO
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {new Date(trade.timestamp).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
-                          {trade.exchange && ` · ${trade.exchange}`}
-                        </p>
-                      </div>
-                      <div className="text-right hidden sm:block">
-                        <p className="text-xs">{trade.amount.toLocaleString(undefined, { maximumFractionDigits: 6 })}</p>
-                        <p className="text-[10px] text-muted-foreground">@ {formatValue(trade.price)}</p>
-                      </div>
-                      <div className="text-right min-w-16">
-                        <p className="text-xs font-medium">{formatValue(trade.cost)}</p>
-                        {trade.fee > 0 && <p className="text-[9px] text-muted-foreground">fee {formatValue(trade.fee)}</p>}
-                      </div>
-                      {trade.pnl !== null && trade.pnl !== undefined && (
-                        <div className="text-right min-w-20 hidden sm:block">
-                          <p className={`text-xs font-medium ${trade.pnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                            {trade.pnl >= 0 ? '+' : ''}{formatValue(trade.pnl)}
-                          </p>
-                          {trade.pnlPercent !== null && trade.pnlPercent !== undefined && (
-                            <p className={`text-[9px] ${trade.pnlPercent >= 0 ? 'text-muted-foreground' : 'text-red-500'}`}>
-                              {trade.pnlPercent >= 0 ? '+' : ''}{trade.pnlPercent.toFixed(1)}%
+                <div className="border border-border overflow-x-auto">
+                  {/* Header — explica cada coluna */}
+                  <div className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 px-3 py-2 border-b border-border bg-muted/30 text-[10px] text-muted-foreground">
+                    <span className="font-medium">Par · hora</span>
+                    <span className="text-right min-w-[3rem] font-medium" title="Quantidade comprada ou vendida">Qtd</span>
+                    <span className="text-right min-w-[4.5rem] font-medium" title="Preço por unidade">Preço</span>
+                    <span className="text-right min-w-[4rem] font-medium" title="Valor total da operação">Total</span>
+                    <span className="text-right min-w-[3.5rem] font-medium" title="Taxa paga à exchange">Comissão</span>
+                  </div>
+                  <div className="divide-y divide-border">
+                    {group.trades.map((trade, i) => (
+                      <div key={trade.id || i} className="grid grid-cols-[1fr_auto_auto_auto_auto] gap-3 items-center p-3 bg-card hover:bg-muted/50 transition-colors">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-0.5 shrink-0 bg-foreground self-stretch min-h-8" />
+                          <AssetIcon symbol={trade.symbol.split('/')[0]?.split(':')[0] || trade.symbol.split('/')[0] || trade.symbol} size={20} className="shrink-0" />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium text-xs">{trade.symbol}</span>
+                              <span className="text-[9px] px-1.5 py-0.5 bg-muted text-foreground">
+                                {trade.side === 'buy' ? 'COMPRA' : 'VENDA'}
+                              </span>
+                              {trade.marketType === 'future' && (
+                                <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                                  FUTUROS
+                                </span>
+                              )}
+                              {trade.isDelisted && (
+                                <span
+                                  className="text-[9px] px-1.5 py-0.5 bg-muted text-muted-foreground"
+                                  title="Par deslistado da exchange"
+                                >
+                                  DESLISTADO
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              {new Date(trade.timestamp).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
+                              {trade.exchange && ` · ${trade.exchange}`}
                             </p>
-                          )}
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                        <div className="text-right text-xs min-w-[3rem] max-w-[4rem] overflow-hidden text-ellipsis tabular-nums" title={formatQuantityCompact(trade.amount).full}>
+                          {formatQuantityCompact(trade.amount).display}
+                        </div>
+                        <div className="text-right text-xs min-w-[4.5rem] max-w-[6rem] overflow-hidden text-ellipsis text-muted-foreground tabular-nums" title={formatPriceCompact(trade.price, formatPrice).full}>
+                          {formatPriceCompact(trade.price, formatPrice).display}
+                        </div>
+                        <div className="text-right text-xs font-medium min-w-[4rem]">
+                          {formatValue(trade.cost)}
+                        </div>
+                        <div className="text-right text-xs min-w-[3.5rem] text-muted-foreground">
+                          {trade.fee > 0 ? formatValue(feeToUsd(trade, priceMap)) : '—'}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         )}
-      </FadeIn>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <FadeIn delay={0.2}>
-          <div className="flex items-center justify-between pt-2">
-            <p className="text-xs text-muted-foreground">
-              {((page - 1) * PER_PAGE) + 1}–{Math.min(page * PER_PAGE, totalTrades)} de {totalTrades}
-            </p>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 w-8 p-0 text-xs"
-                disabled={page <= 1}
-                onClick={() => setPage(1)}
-                aria-label="Primeira página"
-              >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 w-8 p-0 text-xs"
-                disabled={page <= 1}
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                aria-label="Página anterior"
-              >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
-              </Button>
-              {getPageNumbers().map((p, i) =>
-                p === 'dots' ? (
-                  <span key={`dots-${i}`} className="px-1 text-xs text-muted-foreground">...</span>
-                ) : (
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <FadeIn delay={0.2}>
+              <div className="flex items-center justify-between pt-2">
+                <p className="text-xs text-muted-foreground">
+                  {((page - 1) * PER_PAGE) + 1}–{Math.min(page * PER_PAGE, totalTrades)} de {totalTrades}
+                </p>
+                <div className="flex items-center gap-1">
                   <Button
-                    key={p}
-                    variant={page === p ? 'default' : 'outline'}
+                    variant="outline"
                     size="sm"
                     className="h-8 w-8 p-0 text-xs"
-                    onClick={() => setPage(p)}
+                    disabled={page <= 1}
+                    onClick={() => setPage(1)}
+                    aria-label="Primeira página"
                   >
-                    {p}
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="11 17 6 12 11 7"/><polyline points="18 17 13 12 18 7"/></svg>
                   </Button>
-                ),
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 w-8 p-0 text-xs"
-                disabled={page >= totalPages}
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                aria-label="Próxima página"
-              >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 w-8 p-0 text-xs"
-                disabled={page >= totalPages}
-                onClick={() => setPage(totalPages)}
-                aria-label="Última página"
-              >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
-              </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 p-0 text-xs"
+                    disabled={page <= 1}
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    aria-label="Página anterior"
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 18 9 12 15 6"/></svg>
+                  </Button>
+                  {getPageNumbers().map((p, i) =>
+                    p === 'dots' ? (
+                      <span key={`dots-${i}`} className="px-1 text-xs text-muted-foreground">...</span>
+                    ) : (
+                      <Button
+                        key={p}
+                        variant={page === p ? 'default' : 'outline'}
+                        size="sm"
+                        className="h-8 w-8 p-0 text-xs"
+                        onClick={() => setPage(p)}
+                      >
+                        {p}
+                      </Button>
+                    ),
+                  )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 p-0 text-xs"
+                    disabled={page >= totalPages}
+                    onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                    aria-label="Próxima página"
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-8 p-0 text-xs"
+                    disabled={page >= totalPages}
+                    onClick={() => setPage(totalPages)}
+                    aria-label="Última página"
+                  >
+                    <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="13 17 18 12 13 7"/><polyline points="6 17 11 12 6 7"/></svg>
+                  </Button>
+                </div>
+              </div>
+            </FadeIn>
+          )}
+          </div>
+          {/* Stats column — aligned with first trade (offset = date line height) */}
+          <div className="flex flex-wrap gap-3 lg:flex-col lg:flex-nowrap lg:gap-3 pt-5.5">
+            <div className="border border-border bg-card px-4 py-3 min-w-[140px] lg:min-w-0 shrink-0">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Total</p>
+              <p className="text-lg font-medium mt-0.5 font-display break-words">{allTradesData?.total || 0}</p>
+              <p className="text-[10px] text-muted-foreground">{buyCount}C · {sellCount}V</p>
+            </div>
+            <div className="border border-border bg-card px-4 py-3 min-w-[140px] lg:min-w-0 shrink-0">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest">P&L Realizado</p>
+              <p className={`text-lg font-medium mt-0.5 font-display break-words ${totalPnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                {totalPnl >= 0 ? '+' : ''}{formatValue(totalPnl)}
+              </p>
+            </div>
+            <div className="border border-border bg-card px-4 py-3 min-w-[140px] lg:min-w-0 shrink-0">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Volume</p>
+              <p className="text-lg font-medium mt-0.5 font-display break-words">{formatValue(totalVolume)}</p>
+            </div>
+            <div className="border border-border bg-card px-4 py-3 min-w-[140px] lg:min-w-0 shrink-0">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Total Fees</p>
+              <p className="text-lg font-medium mt-0.5 font-display break-words">{formatValue(totalFees)}</p>
             </div>
           </div>
-        </FadeIn>
-      )}
+        </div>
+      </FadeIn>
     </div>
+  );
+}
+
+export default function HistoryPage() {
+  return (
+    <Suspense fallback={<Skeleton className="h-[60vh] w-full" />}>
+      <HistoryPageContent />
+    </Suspense>
   );
 }

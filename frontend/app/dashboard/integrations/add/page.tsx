@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,8 +15,13 @@ import { toast } from 'sonner';
 function AddIntegrationContent() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const typeId = searchParams.get('type');
+  const [typeId, setTypeId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    setTypeId(params.get('type'));
+  }, []);
 
   const integration = typeId ? getIntegrationById(typeId) : null;
 
@@ -233,14 +238,5 @@ function AddIntegrationContent() {
 }
 
 export default function AddIntegrationPage() {
-  return (
-    <Suspense fallback={
-      <div className="max-w-lg mx-auto space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <Skeleton className="h-64" />
-      </div>
-    }>
-      <AddIntegrationContent />
-    </Suspense>
-  );
+  return <AddIntegrationContent />;
 }

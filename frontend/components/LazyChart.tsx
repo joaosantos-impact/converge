@@ -4,8 +4,7 @@ import dynamic from 'next/dynamic';
 
 /**
  * Lazy-loaded chart components.
- * Recharts is a large library (~200KB). By loading it dynamically,
- * we keep the initial bundle small and only load charts when needed.
+ * D3-based charts are loaded on demand to keep the initial bundle smaller.
  */
 
 export const LazyPerformanceChart = dynamic(

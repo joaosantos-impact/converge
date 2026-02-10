@@ -24,6 +24,7 @@ export class TradesController {
   async getTrades(
     @CurrentUser() user: any,
     @Query('days') daysParam?: string,
+    @Query('year') yearParam?: string,
     @Query('symbol') symbolParam?: string,
     @Query('search') searchParam?: string,
     @Query('side') sideParam?: string,
@@ -32,10 +33,13 @@ export class TradesController {
     @Query('page') pageParam?: string,
     @Query('limit') limitParam?: string,
   ) {
-    // days=0 means "all time" (no date filter)
-    const rawDays = daysParam !== undefined && daysParam !== '' ? parseInt(daysParam, 10) : 30;
-    const days = isNaN(rawDays) ? 30 : Math.max(0, rawDays);
-    const symbolFilter = (symbolParam || searchParam || '').toUpperCase() || null;
+    // year: filter by calendar year (e.g. 2024). Takes precedence over days.
+    // days=0 means "all time" when year not set
+    const yearFilter = yearParam && yearParam !== 'all' ? parseInt(yearParam, 10) : null;
+    const rawDays = yearFilter == null && daysParam !== undefined && daysParam !== '' ? parseInt(daysParam, 10) : 0;
+    const days = isNaN(rawDays) ? 0 : Math.max(0, rawDays);
+    const raw = (symbolParam || searchParam || '').trim().toUpperCase();
+    const symbolFilter = raw && raw !== 'ALL' ? raw : null;
     const sideFilter = sideParam === 'buy' || sideParam === 'sell' ? sideParam : null;
     const exchangeFilter = exchangeParam && exchangeParam !== 'all' ? exchangeParam : null;
     const marketTypeFilter = marketTypeParam === 'spot' || marketTypeParam === 'future' ? marketTypeParam : null;
@@ -47,10 +51,11 @@ export class TradesController {
       100000,
     );
 
-    this.logger.debug(`getTrades: days=${days}, page=${page}, limit=${limit}, side=${sideFilter}, exchange=${exchangeFilter}, marketType=${marketTypeFilter}, symbol=${symbolFilter}`);
+    this.logger.debug(`getTrades: days=${days}, year=${yearFilter ?? 'none'}, page=${page}, limit=${limit}, side=${sideFilter}, exchange=${exchangeFilter}, marketType=${marketTypeFilter}, symbol=${symbolFilter}`);
 
     return this.tradesService.getTrades(user.id, {
       days,
+      yearFilter,
       symbolFilter,
       sideFilter,
       exchangeFilter,
