@@ -46,4 +46,5 @@ EXPOSE 4000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:4000/api/health || exit 1
 
-CMD ["sh", "-c", "npx prisma migrate deploy --schema=./prisma/schema.prisma --config=./prisma.config.ts && node dist/main.js"]
+# If migrate deploy fails with P3005 (DB has tables but no migration history), baseline and retry
+CMD ["sh", "-c", "npx prisma migrate deploy --schema=./prisma/schema.prisma --config=./prisma.config.ts || (npx prisma migrate resolve --applied 0_init --schema=./prisma/schema.prisma --config=./prisma.config.ts && npx prisma migrate deploy --schema=./prisma/schema.prisma --config=./prisma.config.ts) && node dist/main.js"]
