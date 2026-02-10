@@ -29,7 +29,7 @@ FROM node:20-alpine AS runner
 
 WORKDIR /app
 
-# Copy backend runtime: dist, prisma schema, config, package.json
+# Copy backend runtime: dist, prisma schema + migrations, config, package.json
 COPY --from=builder /app/backend/dist ./dist
 COPY --from=builder /app/backend/prisma ./prisma
 COPY --from=builder /app/backend/prisma.config.ts ./prisma.config.ts

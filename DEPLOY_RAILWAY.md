@@ -63,7 +63,20 @@ Os Dockerfiles usam `process.env.PORT` / `ENV PORT`, compatível com o Railway.
 
 O backend corre `prisma migrate deploy` no arranque do container, antes de iniciar o servidor. Garante que as migrações estão commitadas em `backend/prisma/migrations/`.
 
-Se usares `prisma db push` em desenvolvimento e não tiveres migrations, considera criar uma migração inicial:
+### Base de dados já existente (baseline)
+
+Se a base de dados de produção **já tem tabelas** (ex.: criadas com `db push` ou manualmente), é preciso fazer baseline uma vez:
+
+```bash
+cd backend
+DATABASE_URL="postgresql://..." npx prisma migrate resolve --applied 0_init --config prisma.config.ts
+```
+
+Usa o teu `DATABASE_URL` de produção. Isto marca a migração inicial como já aplicada, sem executar o SQL. Depois disto, o `migrate deploy` no container vai funcionar.
+
+### Nova base de dados
+
+Se estiveres a começar do zero, corre `prisma migrate dev` localmente primeiro para gerar migrações:
 
 ```bash
 cd backend && npx prisma migrate dev --name init

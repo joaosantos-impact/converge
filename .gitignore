@@ -35,9 +35,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# prisma
-**/prisma/migrations/*/migration.sql
-
 # lock files (keep only root)
 frontend/package-lock.json
 backend/package-lock.json
