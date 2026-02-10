@@ -15,7 +15,11 @@ export class AuthService implements OnModuleInit {
   constructor(private readonly prisma: PrismaService) {}
 
   onModuleInit() {
-    const baseURL = process.env.BETTER_AUTH_URL;
+    const baseURL = process.env.BETTER_AUTH_URL || process.env.FRONTEND_URL;
+    if (!baseURL) {
+      this.logger.warn('BETTER_AUTH_URL and FRONTEND_URL are unset; auth will fail');
+    }
+    this.logger.log(`Better Auth baseURL: ${baseURL || '(unset)'}`);
     const socialProviders: Record<string, { clientId: string; clientSecret: string }> = {};
     if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
       socialProviders.google = {
@@ -23,9 +27,13 @@ export class AuthService implements OnModuleInit {
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       };
     }
+    const trustedOrigins = [baseURL, process.env.FRONTEND_URL].filter(Boolean);
+    const uniqueOrigins = [...new Set(trustedOrigins)];
+
     this.auth = betterAuth({
       appName: 'Converge',
       baseURL,
+      trustedOrigins: uniqueOrigins.length > 0 ? uniqueOrigins : undefined,
       database: prismaAdapter(this.prisma, {
         provider: 'postgresql',
       }),
