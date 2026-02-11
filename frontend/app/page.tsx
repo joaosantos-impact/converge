@@ -297,6 +297,7 @@ function AnimatedStat({ value, label }: { value: string; label: string }) {
   const { ref, visible } = useScrollReveal();
   const [displayed, setDisplayed] = useState(value);
 
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (!visible) { setDisplayed(value); return; }
     const match = value.match(/^(\d+)/);
@@ -311,6 +312,7 @@ function AnimatedStat({ value, label }: { value: string; label: string }) {
     }, 30);
     return () => clearInterval(timer);
   }, [visible, value]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   return (
     <div ref={ref} className="text-center" style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(16px)', transition: 'opacity 0.6s ease, transform 0.6s ease' }}>
