@@ -70,8 +70,13 @@ export default function PortfolioPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { syncing, canSync, triggerSync } = useAutoSync();
-  const { data: accounts = [] } = useExchangeAccounts();
-  const showSyncing = syncing && accounts.length > 0;
+  const {
+    data: accounts,
+    isLoading: accountsLoading,
+    isFetching: accountsFetching,
+  } = useExchangeAccounts();
+  const accountsCount = accounts?.length ?? 0;
+  const showSyncing = syncing && accountsCount > 0;
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -94,7 +99,7 @@ export default function PortfolioPage() {
 
   const { data: portfolioAll } = usePortfolio({ perPage: 200 });
 
-  const { data: currentUser } = useQuery({
+  const { data: currentUser, isLoading: userLoading } = useQuery({
     queryKey: ['current-user'],
     queryFn: async () => {
       const r = await fetch('/api/user');
@@ -136,8 +141,10 @@ export default function PortfolioPage() {
   }, [portfolio?.pagination, assetFilter, assets.length]);
 
   const showOnboarding = !!(
-    accounts &&
-    accounts.length === 0 &&
+    !accountsLoading &&
+    !accountsFetching &&
+    !userLoading &&
+    accountsCount === 0 &&
     !currentUser?.onboardingCompleted &&
     !onboardingJustCompleted
   );
