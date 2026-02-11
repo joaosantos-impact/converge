@@ -41,12 +41,27 @@ function IconLink() {
   );
 }
 
-function IconWallet() {
+function IconAutomation() {
   return (
     <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
-      <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
-      <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 5V3" />
+      <path d="M12 21v-2" />
+      <path d="M5 12H3" />
+      <path d="M21 12h-2" />
+      <path d="M18.36 5.64l-1.41 1.41" />
+      <path d="M7.05 16.95l-1.41 1.41" />
+      <path d="M5.64 5.64l1.41 1.41" />
+      <path d="M16.95 16.95l1.41 1.41" />
+    </svg>
+  );
+}
+
+function IconCode() {
+  return (
+    <svg className="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="16 18 22 12 16 6" />
+      <polyline points="8 6 2 12 8 18" />
     </svg>
   );
 }
@@ -281,12 +296,11 @@ function CookieConsent() {
 function AnimatedStat({ value, label }: { value: string; label: string }) {
   const { ref, visible } = useScrollReveal();
   const [displayed, setDisplayed] = useState(value);
-  const numericMatch = value.match(/^(\d+)/);
 
-  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    if (!visible || !numericMatch) { setDisplayed(value); return; }
-    const match = numericMatch;
+    if (!visible) { setDisplayed(value); return; }
+    const match = value.match(/^(\d+)/);
+    if (!match) { setDisplayed(value); return; }
     const target = parseInt(match[1]);
     let current = 0;
     const step = Math.max(1, Math.floor(target / 30));
@@ -296,8 +310,7 @@ function AnimatedStat({ value, label }: { value: string; label: string }) {
       setDisplayed(value.replace(match[1], String(current)));
     }, 30);
     return () => clearInterval(timer);
-  }, [visible, value, numericMatch]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  }, [visible, value]);
 
   return (
     <div ref={ref} className="text-center" style={{ opacity: visible ? 1 : 0, transform: visible ? 'translateY(0)' : 'translateY(16px)', transition: 'opacity 0.6s ease, transform 0.6s ease' }}>
@@ -468,7 +481,7 @@ export default function LandingPage() {
               transition: 'opacity 0.8s ease 0.4s, transform 0.8s ease 0.4s',
             }}
           >
-            Liga exchanges e wallets, acompanha preços em tempo real, 
+            Liga exchanges, acompanha preços em tempo real,
             calcula impostos para Portugal e partilha o teu portfolio.
           </p>
 
@@ -510,7 +523,7 @@ export default function LandingPage() {
       <section className="py-16 px-6">
         <div className="max-w-4xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8">
           <AnimatedStat value="15+" label="Exchanges" />
-          <AnimatedStat value="10+" label="Wallets" />
+          <AnimatedStat value="24/7" label="Auto Sync" />
           <AnimatedStat value="AES-256" label="Encriptação" />
           <AnimatedStat value="0€" label="Para começar" />
         </div>
@@ -589,11 +602,11 @@ export default function LandingPage() {
                 <div className="absolute bottom-0 right-0 w-12 h-12 opacity-0 group-hover:opacity-100 transition-opacity duration-700"><div className="absolute bottom-0 right-0 w-full h-px bg-gradient-to-l from-white/30 to-transparent" /><div className="absolute bottom-0 right-0 h-full w-px bg-gradient-to-t from-white/30 to-transparent" /></div>
                 <div className="flex items-start gap-4">
                   <div className="w-10 h-10 flex items-center justify-center border border-white/10 bg-white/[0.03] text-white/70 group-hover:text-white transition-colors shrink-0">
-                    <IconWallet />
+                    <IconAutomation />
                   </div>
                   <div>
-                    <h3 className="text-sm font-medium text-white">Wallets & Blockchains</h3>
-                    <p className="text-[13px] text-white/55 mt-1.5 leading-relaxed">Metamask, Phantom, Ledger, Trezor. Ethereum, Solana, Bitcoin e mais.</p>
+                    <h3 className="text-sm font-medium text-white">Sync automático</h3>
+                    <p className="text-[13px] text-white/55 mt-1.5 leading-relaxed">Executamos sincronizações 24/7 para manter o teu portfolio atualizado sem mexeres em nada.</p>
                   </div>
                 </div>
               </div>
@@ -704,7 +717,7 @@ export default function LandingPage() {
                 { icon: <IconShield />, label: 'Encriptação AES-256-GCM', desc: 'As chaves nunca são guardadas em texto' },
                 { icon: <IconFingerprint />, label: '2FA Disponível', desc: 'Autenticação de dois fatores para a tua conta' },
                 { icon: <IconLink />, label: 'API Read-Only', desc: 'Sem permissões de trading ou transferência' },
-                { icon: <IconWallet />, label: 'Open Source', desc: 'Código verificável e transparente' },
+                { icon: <IconCode />, label: 'Open Source', desc: 'Código verificável e transparente' },
               ].map((item, i) => (
                 <Reveal key={item.label} delay={i * 0.08}>
                   <div className="flex items-start gap-4 p-4 border border-white/[0.06] bg-white/[0.015] hover:bg-white/[0.03] transition-colors">
