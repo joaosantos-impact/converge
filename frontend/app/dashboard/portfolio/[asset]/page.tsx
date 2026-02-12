@@ -36,7 +36,7 @@ const TIME_RANGE_CONFIG: Record<TimeRange, { days: number; interval: string; lab
   '30d': { days: 30, interval: '4h', label: '1M' },
   '90d': { days: 90, interval: '1d', label: '3M' },
   '1y': { days: 365, interval: '1d', label: '1A' },
-  'all': { days: 1825, interval: '1d', label: 'Max' }, // 5 anos
+  'all': { days: 2922, interval: '1d', label: 'Max' }, // 8 years
 };
 
 export default function AssetDetailPage() {
@@ -51,7 +51,7 @@ export default function AssetDetailPage() {
   const [timeRange, setTimeRange] = useState<TimeRange>('90d');
 
   const { data: assetStats, isLoading: assetStatsLoading } = useAssetStats(asset);
-  const { data: tradesData, isLoading: tradesLoading } = useTrades(1825, asset, 10000);
+  const { data: tradesData, isLoading: tradesLoading } = useTrades(2922, asset, 10000);
   const loading = assetStatsLoading || tradesLoading;
 
   const { prices: livePrices } = useLivePrices(asset ? [asset] : []);

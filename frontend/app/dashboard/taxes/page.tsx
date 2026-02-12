@@ -23,11 +23,17 @@ import { useSession } from '@/lib/auth-client';
 import { useCurrency } from '@/app/providers';
 import { usePortfolio } from '@/hooks/use-portfolio';
 import { useTrades } from '@/hooks/use-trades';
-import type { TradeData } from '@/lib/types';
+import { buildAssetPriceMap, feeToUsd, processFIFO, type BuyLot } from '@/lib/fifo';
 import { toast } from 'sonner';
 import { FadeIn } from '@/components/animations';
 import { AssetIcon } from '@/components/AssetIcon';
-import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, Info } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 // CIRS Art. 10.º n.º 19 — isenção de mais-valias em criptoactivos detidos ≥365 dias
 // Regra introduzida pela Lei n.º 24-D/2022 (OE 2023)
@@ -42,82 +48,6 @@ const generateTaxReportPDF = async (...args: Parameters<typeof import('@/lib/pdf
   const { generateTaxReportPDF: fn } = await import('@/lib/pdf-export');
   return fn(...args);
 };
-
-// ---------------------------------------------------------------------------
-// Fee to USD conversion (fees can be in USDT, BNB, base asset, etc.)
-// ---------------------------------------------------------------------------
-
-const STABLECOINS = new Set(['USDT', 'USDC', 'USD', 'BUSD', 'DAI', 'TUSD', 'FDUSD', 'USDP', 'FRAX', 'EUR']);
-
-function buildAssetPriceMap(trades: TradeData[]): Map<string, number> {
-  const m = new Map<string, number>();
-  const byTime = [...trades].sort(
-    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-  );
-  for (const t of byTime) {
-    const parts = t.symbol.split('/');
-    const base = parts[0]?.toUpperCase();
-    const quote = parts[1]?.split(':')[0]?.toUpperCase();
-    if (base && quote && STABLECOINS.has(quote) && !m.has(base)) {
-      m.set(base, t.price);
-    }
-  }
-  return m;
-}
-
-function feeToUsd(trade: TradeData, priceMap: Map<string, number>): number {
-  const fee = trade.fee || 0;
-  if (fee <= 0) return 0;
-  const fc = (trade.feeCurrency || 'USDT').toUpperCase();
-  if (STABLECOINS.has(fc)) return fee;
-  const price = priceMap.get(fc);
-  if (price != null) return fee * price;
-  const [base, quote] = (trade.symbol || '').split('/');
-  const baseNorm = base?.toUpperCase();
-  const quoteNorm = quote?.split(':')[0]?.toUpperCase();
-  if (baseNorm === fc && quoteNorm && STABLECOINS.has(quoteNorm)) {
-    return fee * trade.price;
-  }
-  return 0;
-}
-
-// ---------------------------------------------------------------------------
-// FIFO lot tracking
-// ---------------------------------------------------------------------------
-
-interface BuyLot {
-  date: Date;
-  amount: number;       // remaining amount in this lot
-  pricePerUnit: number;  // cost per unit
-  totalCost: number;     // original total cost of the lot
-  exchange: string;
-  symbol: string;
-}
-
-interface SaleEvent {
-  date: Date;
-  symbol: string;
-  baseAsset: string;
-  amount: number;
-  revenue: number;       // proceeds from sell
-  fee: number;
-  exchange: string;
-  // FIFO-matched data
-  costBasis: number;     // total cost of the matched lots
-  realizedPnL: number;   // revenue - costBasis - fee
-  holdingDays: number;   // weighted average holding days (for display)
-  isTaxFree: boolean;    // ALL matched lots held > 365 days
-  taxFreePortion: number; // portion of P&L from lots held > 365d
-  taxablePortion: number; // portion of P&L from lots held <= 365d
-  lots: Array<{
-    buyDate: Date;
-    amount: number;
-    costBasis: number;
-    holdingDays: number;
-    isTaxFree: boolean;
-    pnl: number;
-  }>;
-}
 
 interface AssetHolding {
   asset: string;
@@ -135,112 +65,6 @@ interface AssetHolding {
   buyLots: BuyLot[];           // remaining lots
 }
 
-/**
- * Process all trades chronologically using FIFO to build:
- * 1. Per-asset buy lot queues (for unrealized P&L)
- * 2. Per-sale event breakdown (for realized P&L with holding period)
- */
-function processFIFO(allTrades: TradeData[]) {
-  const priceMap = buildAssetPriceMap(allTrades);
-  // Sort oldest first
-  const chronological = [...allTrades].sort(
-    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-  );
-
-  // Buy lots per base asset (FIFO queue — oldest first)
-  const lotQueues = new Map<string, BuyLot[]>();
-  const sales: SaleEvent[] = [];
-
-  for (const trade of chronological) {
-    const baseAsset = trade.symbol.split('/')[0];
-
-    if (trade.side === 'buy') {
-      if (!lotQueues.has(baseAsset)) lotQueues.set(baseAsset, []);
-      lotQueues.get(baseAsset)!.push({
-        date: new Date(trade.timestamp),
-        amount: trade.amount,
-        pricePerUnit: trade.price,
-        totalCost: trade.cost,
-        exchange: trade.exchange,
-        symbol: trade.symbol,
-      });
-    } else if (trade.side === 'sell') {
-      const lots = lotQueues.get(baseAsset) || [];
-      let remaining = trade.amount;
-      let totalCostBasis = 0;
-      const matchedLots: SaleEvent['lots'] = [];
-      const sellDate = new Date(trade.timestamp);
-
-      // FIFO: consume oldest lots first
-      while (remaining > 0 && lots.length > 0) {
-        const lot = lots[0];
-        const consumed = Math.min(remaining, lot.amount);
-        const lotCost = consumed * lot.pricePerUnit;
-        const holdingDays = Math.floor(
-          (sellDate.getTime() - lot.date.getTime()) / (1000 * 60 * 60 * 24),
-        );
-        const isTaxFree = holdingDays >= 365;
-        const lotRevenue = (consumed / trade.amount) * trade.cost;
-        const lotPnl = lotRevenue - lotCost;
-
-        matchedLots.push({
-          buyDate: lot.date,
-          amount: consumed,
-          costBasis: lotCost,
-          holdingDays,
-          isTaxFree,
-          pnl: lotPnl,
-        });
-
-        totalCostBasis += lotCost;
-        lot.amount -= consumed;
-        remaining -= consumed;
-
-        if (lot.amount <= 0.00000001) lots.shift(); // remove exhausted lot
-      }
-
-      const revenue = trade.cost;
-      const feeUsd = feeToUsd(trade, priceMap);
-      const realizedPnL = revenue - totalCostBasis - feeUsd;
-
-      // Calculate tax-free vs taxable portions
-      let taxFreePnL = 0;
-      let taxablePnL = 0;
-      for (const ml of matchedLots) {
-        if (ml.isTaxFree) taxFreePnL += ml.pnl;
-        else taxablePnL += ml.pnl;
-      }
-
-      // Weighted average holding days
-      const totalMatchedAmount = matchedLots.reduce((s, l) => s + l.amount, 0);
-      const weightedDays = totalMatchedAmount > 0
-        ? matchedLots.reduce((s, l) => s + l.holdingDays * l.amount, 0) / totalMatchedAmount
-        : 0;
-
-      const allTaxFree = matchedLots.length > 0 && matchedLots.every(l => l.isTaxFree);
-
-      sales.push({
-        date: sellDate,
-        symbol: trade.symbol,
-        baseAsset,
-        amount: trade.amount,
-        revenue,
-        fee: feeUsd,
-        exchange: trade.exchange,
-        costBasis: totalCostBasis,
-        realizedPnL,
-        holdingDays: Math.round(weightedDays),
-        isTaxFree: allTaxFree,
-        taxFreePortion: taxFreePnL,
-        taxablePortion: taxablePnL,
-        lots: matchedLots,
-      });
-    }
-  }
-
-  return { lotQueues, sales };
-}
-
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -252,10 +76,8 @@ export default function TaxesPage() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
   const [exporting, setExporting] = useState(false);
   const [salesPage, setSalesPage] = useState(1);
-  const [eligibilityPage, setEligibilityPage] = useState(1);
 
   const SALES_PER_PAGE = 10;
-  const ELIGIBILITY_PER_PAGE = 10;
 
   // Fetch ALL trades (days=0 means all-time) for complete FIFO tracking.
   // Must request high limit — backend caps at 100k; 10k was truncating recent trades (2025).
@@ -271,7 +93,6 @@ export default function TaxesPage() {
 
   useEffect(() => {
     setSalesPage(1);
-    setEligibilityPage(1);
   }, [selectedYear]);
 
   // Available years from trades data
@@ -290,7 +111,7 @@ export default function TaxesPage() {
     salesInYear, holdings, totalRealizedPnL, taxFreeRealizedPnL, taxableRealizedPnL,
     totalBuyVolumeInYear, totalSellVolumeInYear, totalFeesInYear,
     buyCountInYear, sellCountInYear, potentialTax,
-    totalValue, totalInvested, totalUnrealizedPnL,
+    totalValue, totalInvested,
     totalTaxFreeValue, totalTaxableValue,
   } = useMemo(() => {
     const year = parseInt(selectedYear);
@@ -318,10 +139,10 @@ export default function TaxesPage() {
     const totalSellVolumeInYear = sellsInYear.reduce((s, t) => s + t.cost, 0);
     const totalFeesInYear = tradesInYear.reduce((s, t) => s + feeToUsd(t, priceMap), 0);
 
-    // Realized P&L breakdown
-    const totalRealizedPnL = salesInYear.reduce((s, e) => s + e.realizedPnL, 0);
+    // Realized P&L breakdown — total = isento + tributável (guarantees consistency)
     const taxFreeRealizedPnL = salesInYear.reduce((s, e) => s + e.taxFreePortion, 0);
     const taxableRealizedPnL = salesInYear.reduce((s, e) => s + e.taxablePortion, 0);
+    const totalRealizedPnL = taxFreeRealizedPnL + taxableRealizedPnL;
 
     // Only tax positive taxable gains at 28%
     const potentialTax = Math.max(0, taxableRealizedPnL) * 0.28;
@@ -372,7 +193,6 @@ export default function TaxesPage() {
     const fifoTotalValue = holdings.reduce((s, h) => s + h.currentValue, 0);
     const totalValue = portfolioTotalValue > 0 ? portfolioTotalValue : fifoTotalValue;
     const totalInvested = holdings.reduce((s, h) => s + h.totalCost, 0);
-    const totalUnrealizedPnL = totalValue - totalInvested;
 
     const taxFreeHoldings = holdings.filter(h => h.isTaxFree);
     const taxableHoldings = holdings.filter(h => !h.isTaxFree);
@@ -383,7 +203,7 @@ export default function TaxesPage() {
       salesInYear, holdings, totalRealizedPnL, taxFreeRealizedPnL, taxableRealizedPnL,
       totalBuyVolumeInYear, totalSellVolumeInYear, totalFeesInYear,
       buyCountInYear: buysInYear.length, sellCountInYear: sellsInYear.length,
-      potentialTax, totalValue, totalInvested, totalUnrealizedPnL,
+      potentialTax, totalValue, totalInvested,
       totalTaxFreeValue, totalTaxableValue,
     };
   }, [allTrades, selectedYear, portfolioData]);
@@ -393,21 +213,25 @@ export default function TaxesPage() {
     try {
       const headers = [
         'Data', 'Par', 'Exchange', 'Quantidade', 'Receita', 'Custo Base (FIFO)',
-        'P&L Realizado', 'Dias Detenção', 'Isento (>365d)', 'P&L Isento', 'P&L Tributável',
+        'P&L Realizado', 'Dias Detenção', 'Isento (>365d)', 'P&L Isento', 'P&L Tributável', 'Estado',
       ];
-      const rows = salesInYear.map(s => [
-        s.date.toISOString().split('T')[0],
-        s.symbol,
-        s.exchange,
-        s.amount.toFixed(8),
-        formatValue(s.revenue),
-        formatValue(s.costBasis),
-        formatValue(s.realizedPnL),
-        s.holdingDays.toString(),
-        s.isTaxFree ? 'Sim' : 'Não',
-        formatValue(s.taxFreePortion),
-        formatValue(s.taxablePortion),
-      ]);
+      const rows = salesInYear.map(s => {
+        const efectivoIsento = s.isTaxFree || s.realizedPnL < 0;
+        return [
+          s.date.toISOString().split('T')[0],
+          s.symbol,
+          s.exchange,
+          s.amount.toFixed(8),
+          formatValue(s.revenue),
+          formatValue(s.costBasis),
+          formatValue(s.realizedPnL),
+          s.holdingDays.toString(),
+          s.isTaxFree ? 'Sim' : 'Não',
+          formatValue(s.taxFreePortion),
+          formatValue(s.taxablePortion),
+          efectivoIsento ? 'ISENTO' : 'TRIBUTÁVEL',
+        ];
+      });
       const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
@@ -557,7 +381,7 @@ export default function TaxesPage() {
                   O método <span className="text-foreground font-medium">FIFO</span> é utilizado para determinar a detenção de cada venda.
                 </p>
                 <p className="text-[11px] text-muted-foreground/80 mt-1.5 break-words">
-                  {PT_TAX_LAW.label} — {PT_TAX_LAW.article} (isenção de mais-valias em criptoactivos detidos ≥365 dias). Mesmo isentas, as vendas devem ser declaradas no IRS (Anexo G1).
+                  {PT_TAX_LAW.label} — {PT_TAX_LAW.article} (isenção de mais-valias em criptoactivos detidos ≥365 dias). Mesmo isentas ou com perda, as vendas devem ser declaradas no IRS Anexo G — as perdas compensam ganhos futuros.
                 </p>
               </div>
             </div>
@@ -573,7 +397,19 @@ export default function TaxesPage() {
             </div>
             <div className="p-4 space-y-4 min-w-0">
               <div className="flex items-center justify-between gap-3 min-w-0">
-                <span className="text-sm shrink-0">P&L Realizado (total)</span>
+                <div className="flex items-center gap-1.5 shrink-0 min-w-0">
+                  <span className="text-sm">P&L Realizado (total)</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[240px]">
+                        Soma de todos os lucros e perdas das vendas realizadas no ano.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
                 <span className={`font-medium shrink-0 text-right ${totalRealizedPnL >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                   {totalRealizedPnL >= 0 ? '+' : ''}{formatValue(totalRealizedPnL)}
                 </span>
@@ -582,9 +418,21 @@ export default function TaxesPage() {
               <div className="flex items-center justify-between gap-3 min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="w-2 h-2 bg-emerald-500 rounded-full shrink-0" />
-                  <span className="text-sm truncate">P&L Isento (&gt;365 dias)</span>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-sm truncate">P&L Isento (&gt;365 dias)</span>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[260px]">
+                          Ganhos de vendas com detenção ≥365 dias. Isento de imposto (CIRS Art. 10.º n.º 19). Mesmo isentas, as vendas devem ser declaradas no IRS Anexo G1.
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                 </div>
-                <span className="font-medium text-emerald-500 shrink-0 text-right">
+                <span className={`font-medium shrink-0 text-right ${taxFreeRealizedPnL >= 0 ? 'text-emerald-500' : 'text-foreground'}`}>
                   {taxFreeRealizedPnL >= 0 ? '+' : ''}{formatValue(taxFreeRealizedPnL)}
                 </span>
               </div>
@@ -592,7 +440,21 @@ export default function TaxesPage() {
               <div className="flex items-center justify-between gap-3 min-w-0">
                 <div className="flex items-center gap-2 min-w-0">
                   <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: '#f59e0b' }} />
-                  <span className="text-sm truncate">P&L Tributável (&lt;365 dias)</span>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-sm truncate">P&L Tributável (&lt;365 dias)</span>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[280px]">
+                          {taxableRealizedPnL < 0
+                            ? 'Perdas de vendas com detenção <365 dias. Não pagas imposto, mas deves declarar no Anexo G: estas perdas compensam ganhos futuros (ex.: 1000€ de perda + 1000€ de lucro = 0€ de imposto).'
+                            : 'Ganhos de vendas com detenção <365 dias. Tributados a 28% sobre o lucro.'}
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                 </div>
                 <span className="font-medium shrink-0 text-right" style={{ color: '#f59e0b' }}>
                   {taxableRealizedPnL >= 0 ? '+' : ''}{formatValue(taxableRealizedPnL)}
@@ -615,8 +477,20 @@ export default function TaxesPage() {
               </div>
               <div className="h-px bg-border" />
               <div className="flex items-center justify-between gap-3 min-w-0">
-                <span className="text-sm font-medium shrink-0">Imposto estimado (28%)</span>
-                <span className="font-medium text-red-500 shrink-0 text-right">{formatValue(potentialTax)}</span>
+                <div className="flex items-center gap-1.5 shrink-0 min-w-0">
+                  <span className="text-sm font-medium">Imposto estimado (28%)</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[220px]">
+                        28% sobre o P&L tributável positivo. Perdas não geram imposto.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <span className="font-medium shrink-0 text-right" style={{ color: '#f59e0b' }}>{formatValue(potentialTax)}</span>
               </div>
             </div>
           </div>
@@ -707,10 +581,34 @@ export default function TaxesPage() {
                           {sale.holdingDays}d
                         </TableCell>
                         <TableCell className="text-right pr-4">
-                          {sale.isTaxFree ? (
-                            <span className="text-[10px] font-medium px-2 py-0.5 bg-emerald-500/10 text-emerald-500">ISENTO</span>
+                          {sale.isTaxFree || sale.realizedPnL < 0 ? (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-[10px] font-medium px-2 py-0.5 bg-emerald-500/10 text-emerald-500 cursor-help">
+                                    ISENTO
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="max-w-[240px]">
+                                  {sale.realizedPnL < 0
+                                    ? 'Perda: não há imposto. Declara no Anexo G — compensa ganhos futuros.'
+                                    : 'Detenção >365 dias — isento de imposto sobre mais-valias (CIRS Art. 10.º n.º 19).'}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           ) : (
-                            <span className="text-[10px] font-medium px-2 py-0.5 bg-amber-500/10 text-amber-500">TRIBUTÁVEL</span>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-[10px] font-medium px-2 py-0.5 bg-amber-500/10 text-amber-500 cursor-help">
+                                    TRIBUTÁVEL
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="max-w-[200px]">
+                                  Detenção &lt;365 dias com lucro — tributado a 28%.
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           )}
                         </TableCell>
                       </TableRow>
@@ -721,176 +619,66 @@ export default function TaxesPage() {
             )}
           </div>
 
-          {/* Holdings with ROI */}
-          <div className="border border-border bg-card min-w-0">
-            <div className="p-4 border-b border-border">
-              <p className="font-medium text-sm">Holdings Atuais</p>
-            </div>
-            {holdings.length === 0 ? (
-              <div className="p-8 text-center">
-                <p className="text-sm text-muted-foreground">Sem holdings. Sincroniza as tuas exchanges.</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto min-w-0">
-                <Table className="min-w-[480px]">
-                  <TableHeader>
-                    <TableRow className="hover:bg-transparent">
-                      <TableHead className="pl-4">Coin</TableHead>
-                      <TableHead className="text-right">Qtd</TableHead>
-                      <TableHead className="text-right">Custo</TableHead>
-                      <TableHead className="text-right">Valor</TableHead>
-                      <TableHead className="text-right pr-4">ROI</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {holdings.map((h) => {
-                      const pctOfPortfolio = totalValue > 0 ? (h.currentValue / totalValue) * 100 : 0;
-                      return (
-                        <TableRow key={h.asset}>
-                          <TableCell className="pl-4">
-                            <div className="flex items-center gap-3">
-                              <AssetIcon symbol={h.asset} size={32} className="shrink-0 [&_img]:rounded-none" />
-                              <div>
-                                <span className="font-medium text-sm">{h.asset}</span>
-                                <p className="text-xs text-muted-foreground">{pctOfPortfolio.toFixed(0)}%</p>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right text-sm text-muted-foreground">
-                            {h.totalAmount.toLocaleString(undefined, { maximumFractionDigits: 4 })}
-                          </TableCell>
-                          <TableCell className="text-right text-sm text-muted-foreground">
-                            {formatValue(h.totalCost)}
-                          </TableCell>
-                          <TableCell className="text-right text-sm font-medium">
-                            {formatValue(h.currentValue)}
-                          </TableCell>
-                          <TableCell className="text-right pr-4">
-                            <span className={`font-medium text-sm ${h.unrealizedPnLPercent >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                              {h.unrealizedPnLPercent >= 0 ? '+' : ''}{h.unrealizedPnLPercent.toFixed(0)}%
-                            </span>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </div>
-
-          {/* Tax Status per Asset (holding period progress) */}
-          <div className="border border-border bg-card min-w-0">
-            <div className="p-4 border-b border-border">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-medium text-sm">Elegibilidade Fiscal</p>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    Cada compra conta. A mais antiga determina a isenção (FIFO).
-                  </p>
-                </div>
-                {holdings.length > ELIGIBILITY_PER_PAGE && (
-                  <div className="flex items-center gap-1 shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0"
-                      onClick={() => setEligibilityPage((p) => Math.max(1, p - 1))}
-                      disabled={eligibilityPage <= 1}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <span className="text-xs text-muted-foreground min-w-[4rem] text-center">
-                      {eligibilityPage} / {Math.ceil(holdings.length / ELIGIBILITY_PER_PAGE)}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0"
-                      onClick={() => setEligibilityPage((p) => Math.min(Math.ceil(holdings.length / ELIGIBILITY_PER_PAGE), p + 1))}
-                      disabled={eligibilityPage >= Math.ceil(holdings.length / ELIGIBILITY_PER_PAGE)}
-                    >
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-            {holdings.length === 0 ? (
-              <div className="p-8 text-center">
-                <p className="text-sm text-muted-foreground">Sem holdings</p>
-              </div>
-            ) : (
-              holdings
-                .slice((eligibilityPage - 1) * ELIGIBILITY_PER_PAGE, eligibilityPage * ELIGIBILITY_PER_PAGE)
-                .map((h) => (
-                <div key={h.asset} className="flex items-center gap-4 p-4 border-b border-border last:border-b-0">
-                  <AssetIcon symbol={h.asset} size={32} className="shrink-0 [&_img]:rounded-none" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-medium">{h.asset}</span>
-                      {h.isTaxFree ? (
-                        <span className="text-xs font-medium text-emerald-500">ISENTO</span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">{h.daysUntilTaxFree}d restantes</span>
-                      )}
-                    </div>
-                    <div className="h-1 bg-muted w-full">
-                      <div
-                        className="h-full transition-all"
-                        style={{
-                          width: `${h.progressToTaxFree}%`,
-                          backgroundColor: h.isTaxFree ? '#22c55e' : '#f59e0b',
-                        }}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between mt-1">
-                      <p className="text-xs text-muted-foreground">{h.holdingDays} dias (compra mais antiga)</p>
-                      <p className="text-xs text-muted-foreground">{h.buyLots.length} compra{h.buyLots.length !== 1 ? 's' : ''}</p>
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
         </div>
 
         {/* Right column (sidebar) */}
         <div className="space-y-6 min-w-0">
-          {/* Portfolio Overview */}
-          <div className="border border-border bg-card p-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Portfolio Atual</p>
-            <p className="text-2xl font-medium mt-1">{formatValue(totalValue)}</p>
-            <div className="mt-2 space-y-1">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Investido (FIFO)</span>
-                <span>{formatValue(totalInvested)}</span>
-              </div>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">P&L Não Realizado</span>
-                <span className={totalUnrealizedPnL >= 0 ? 'text-emerald-500' : 'text-red-500'}>
-                  {totalUnrealizedPnL >= 0 ? '+' : ''}{formatValue(totalUnrealizedPnL)}
-                </span>
-              </div>
-            </div>
-          </div>
-
           {/* Realized P&L */}
           <div className="border border-border bg-card p-4">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
-              P&L Realizado {selectedYear}
-            </p>
+            <div className="flex items-center gap-1.5 mb-2">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                P&L Realizado {selectedYear}
+              </p>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[220px]">
+                    Lucros e perdas das vendas no ano. Só os lucros são tributáveis.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
             <p className={`text-2xl font-medium ${totalRealizedPnL >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
               {totalRealizedPnL >= 0 ? '+' : ''}{formatValue(totalRealizedPnL)}
             </p>
             <div className="mt-2 space-y-1">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Isento (&gt;365d)</span>
-                <span className="text-emerald-500">{formatValue(taxFreeRealizedPnL)}</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-muted-foreground">Isento (&gt;365d)</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3 w-3 text-muted-foreground shrink-0 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[200px]">
+                        Ganhos isentos. Perdas também aparecem aqui quando detenção &gt;365d.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <span className={taxFreeRealizedPnL >= 0 ? 'text-emerald-500' : 'text-foreground'}>{formatValue(taxFreeRealizedPnL)}</span>
               </div>
               <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Tributável</span>
-                <span style={{ color: '#f59e0b' }}>{formatValue(taxableRealizedPnL)}</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-muted-foreground">Tributável</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3 w-3 text-muted-foreground shrink-0 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[260px]">
+                        {taxableRealizedPnL < 0
+                          ? 'Perdas: não pagas imposto. Declara no Anexo G — compensam ganhos futuros.'
+                          : 'Ganhos detenção &lt;365d — 28% sobre este valor.'}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <span className="font-medium" style={{ color: '#f59e0b' }}>
+                  {formatValue(taxableRealizedPnL)}
+                </span>
               </div>
             </div>
           </div>
@@ -908,7 +696,7 @@ export default function TaxesPage() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">Vendas</span>
-                <span className="text-sm font-medium text-red-500">{sellCountInYear}</span>
+                <span className="text-sm font-medium text-foreground">{sellCountInYear}</span>
               </div>
             </div>
           </div>
@@ -920,17 +708,53 @@ export default function TaxesPage() {
             </p>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm">Isento (&gt;1 ano)</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm">Isento (&gt;1 ano)</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[200px]">
+                        Valor em ativos detidos há mais de 365 dias — futuras vendas isentas.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
                 <span className="text-sm font-medium text-emerald-500">{formatValue(totalTaxFreeValue)}</span>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm">Tributável</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm">Tributável</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[200px]">
+                        Valor em ativos detidos &lt;365 dias — futuras vendas com lucro tributadas a 28%.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
                 <span className="text-sm font-medium" style={{ color: '#f59e0b' }}>{formatValue(totalTaxableValue)}</span>
               </div>
               <div className="h-px bg-border" />
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium">Imposto (28%)</span>
-                <span className="text-sm font-medium text-red-500">{formatValue(potentialTax)}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm font-medium">Imposto (28%)</span>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-[200px]">
+                        Só sobre lucros tributáveis. Perdas = 0€ de imposto.
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </div>
+                <span className="text-sm font-medium" style={{ color: '#f59e0b' }}>{formatValue(potentialTax)}</span>
               </div>
             </div>
           </div>
@@ -966,10 +790,11 @@ export default function TaxesPage() {
 
           {/* Notes */}
           <div className="p-4 bg-muted text-xs text-muted-foreground space-y-2 break-words min-w-0">
+            <p>-- Só os lucros são tributáveis. Perdas não geram imposto.</p>
+            <p>-- Declara tudo no Anexo G — mesmo perdas (compensam ganhos futuros)</p>
             <p>-- Cada venda é cruzada com as compras mais antigas (FIFO)</p>
             <p>-- Se todas as compras usadas tiverem &gt;365 dias, o ganho é isento</p>
-            <p>-- Vendas parcialmente isentas mostram a divisão</p>
-            <p>-- Perdas tributáveis compensam ganhos no mesmo ano</p>
+            <p>-- Vendas com prejuízo são isentas de imposto (0€ a pagar)</p>
           </div>
         </div>
       </div>

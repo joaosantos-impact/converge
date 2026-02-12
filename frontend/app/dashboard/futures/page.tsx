@@ -4,13 +4,13 @@ import { Suspense } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TradeHistoryView } from '@/components/TradeHistoryView';
 
-export default function SpotPage() {
+export default function FuturesPage() {
   return (
     <Suspense fallback={<Skeleton className="h-[60vh] w-full" />}>
       <TradeHistoryView
-        marketType="spot"
-        title="Spot"
-        emptyMessage="Sem operações spot encontradas"
+        marketType="future"
+        title="Futuros"
+        emptyMessage="Sem operações de futuros encontradas"
       />
     </Suspense>
   );

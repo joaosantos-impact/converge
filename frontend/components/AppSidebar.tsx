@@ -42,12 +42,14 @@ import {
   LogOut,
   GitCompare,
   PenLine,
+  CandlestickChart,
 } from "lucide-react";
 
 const mainNav = [
   { title: "Portfolio", href: "/dashboard/portfolio", icon: Wallet },
   { title: "Integrações", href: "/dashboard/integrations", icon: Link2 },
-  { title: "Trades", href: "/dashboard/history", icon: History },
+  { title: "Spot", href: "/dashboard/history", icon: History },
+  { title: "Futuros", href: "/dashboard/futures", icon: CandlestickChart },
   { title: "Estatísticas", href: "/dashboard/analytics", icon: BarChart3 },
   { title: "Impostos", href: "/dashboard/taxes", icon: Receipt },
 ];
@@ -83,7 +85,7 @@ export function AppSidebar() {
   };
 
   const renderNavItems = (items: typeof mainNav) => (
-    <SidebarMenu className="gap-1">
+    <SidebarMenu className="gap-0.5">
       {items.map((item) => {
         const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
         
@@ -92,11 +94,11 @@ export function AppSidebar() {
             <SidebarMenuButton 
               asChild 
               isActive={isActive}
-              className="h-10 px-3 transition-colors hover:bg-sidebar-accent data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium"
+              className="h-8 px-2.5 transition-colors hover:bg-sidebar-accent data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium"
             >
               <Link href={item.href} onClick={closeSidebarIfMobile} aria-current={isActive ? 'page' : undefined}>
-                <item.icon className="h-4 w-4 shrink-0" />
-                <span className="text-sm">{item.title}</span>
+                <item.icon className="h-3.5 w-3.5 shrink-0" />
+                <span className="text-xs">{item.title}</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -109,18 +111,18 @@ export function AppSidebar() {
 
   return (
     <Sidebar className="border-r-0">
-      <SidebarHeader className="px-3 py-3">
-        <Link href="/dashboard/portfolio" onClick={closeSidebarIfMobile} className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center bg-foreground shrink-0">
-            <span className="text-xs font-bold text-background">C</span>
+      <SidebarHeader className="px-2.5 py-2">
+        <Link href="/dashboard/portfolio" onClick={closeSidebarIfMobile} className="flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center bg-foreground shrink-0">
+            <span className="text-[10px] font-bold text-background">C</span>
           </div>
-          <span className="text-base font-semibold tracking-tight">Converge</span>
+          <span className="text-sm font-semibold tracking-tight">Converge</span>
         </Link>
       </SidebarHeader>
 
-      <SidebarContent className="px-2.5">
+      <SidebarContent className="px-2">
         <SidebarGroup>
-          <SidebarGroupLabel className="text-[10px] text-muted-foreground uppercase tracking-widest px-2.5 mb-1">
+          <SidebarGroupLabel className="text-[9px] text-muted-foreground uppercase tracking-widest px-2 mb-0.5">
             Principal
           </SidebarGroupLabel>
           <SidebarGroupContent>
@@ -128,8 +130,8 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup className="mt-3">
-          <SidebarGroupLabel className="text-[10px] text-muted-foreground uppercase tracking-widest px-2.5 mb-1">
+        <SidebarGroup className="mt-2">
+          <SidebarGroupLabel className="text-[9px] text-muted-foreground uppercase tracking-widest px-2 mb-0.5">
             Ferramentas
           </SidebarGroupLabel>
           <SidebarGroupContent>
@@ -137,8 +139,8 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup className="mt-3">
-          <SidebarGroupLabel className="text-[10px] text-muted-foreground uppercase tracking-widest px-2.5 mb-1">
+        <SidebarGroup className="mt-2">
+          <SidebarGroupLabel className="text-[9px] text-muted-foreground uppercase tracking-widest px-2 mb-0.5">
             Comunidade
           </SidebarGroupLabel>
           <SidebarGroupContent>
@@ -147,37 +149,37 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="p-2.5 space-y-0.5">
+      <SidebarFooter className="p-2 space-y-0.5">
         <button
           onClick={() => {
             closeSidebarIfMobile();
             setLogoutOpen(true);
           }}
-          className="flex items-center gap-2.5 w-full px-2.5 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50 transition-colors cursor-pointer"
+          className="flex items-center gap-2 w-full px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/50 transition-colors cursor-pointer"
           aria-label="Terminar sessão"
         >
-          <LogOut className="h-4 w-4" />
+          <LogOut className="h-3.5 w-3.5" />
           <span>Sair</span>
         </button>
 
         <SidebarSeparator />
 
         <Link href="/dashboard/settings" onClick={closeSidebarIfMobile}>
-          <div className={`flex items-center gap-2.5 px-2.5 py-2 transition-colors cursor-pointer ${
+          <div className={`flex items-center gap-2 px-2 py-1.5 transition-colors cursor-pointer ${
             settingsActive ? 'bg-sidebar-accent' : 'hover:bg-sidebar-accent/50'
           }`}>
-            <div className="w-8 h-8 bg-muted flex items-center justify-center text-xs font-medium shrink-0 rounded-sm overflow-hidden">
+            <div className="w-7 h-7 bg-muted flex items-center justify-center text-[10px] font-medium shrink-0 rounded-sm overflow-hidden">
               {session?.user?.image ? (
-                <Image src={session.user.image} alt="" width={32} height={32} className="w-full h-full object-cover" unoptimized referrerPolicy="no-referrer" />
+                <Image src={session.user.image} alt="" width={28} height={28} className="w-full h-full object-cover" unoptimized referrerPolicy="no-referrer" />
               ) : (
                 userName.slice(0, 2).toUpperCase()
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{userName}</p>
-              <p className="text-xs text-muted-foreground">Conta & Definições</p>
+              <p className="text-xs font-medium truncate">{userName}</p>
+              <p className="text-[10px] text-muted-foreground">Conta & Definições</p>
             </div>
-            <Settings className="h-4 w-4 text-muted-foreground shrink-0" />
+            <Settings className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           </div>
         </Link>
       </SidebarFooter>

@@ -269,9 +269,45 @@ export class CcxtService {
     }
   }
 
+  private static readonly BASE_QUOTES = new Set(['USDT', 'USDC', 'USD', 'BTC', 'ETH', 'EUR']);
+
+  private static isBinance(exchange: any): boolean {
+    const id = (exchange?.id || exchange?.name || '').toLowerCase();
+    return id.startsWith('binance');
+  }
+
+  /**
+   * Extract unique base assets from an exchange's loaded markets.
+   * Only includes assets with tradeable quote pairs (USDT, USDC, etc.) to keep sync feasible.
+   * BUSD only for Binance (Binance-specific stablecoin).
+   */
+  getBaseAssetsFromMarkets(exchange: any, marketType: 'spot' | 'future' = 'spot'): string[] {
+    const assets = new Set<string>();
+    const markets = exchange?.markets || {};
+    const stablecoins = new Set([
+      'USDT', 'USDC', 'USD', 'BUSD', 'DAI', 'TUSD', 'FDUSD', 'EUR',
+    ]);
+    const quotes = new Set(CcxtService.BASE_QUOTES);
+    if (CcxtService.isBinance(exchange)) quotes.add('BUSD');
+
+    for (const market of Object.values(markets) as any[]) {
+      if (!market?.base) continue;
+      const isFuture = market.future === true || market.swap === true;
+      if (marketType === 'spot' && isFuture) continue;
+      if (marketType === 'future' && !isFuture) continue;
+      if (stablecoins.has(market.base)) continue;
+      const quote = market.quote || (market.symbol?.split('/')?.[1]?.split(':')?.[0]);
+      if (!quote || !quotes.has(quote)) continue;
+      assets.add(market.base);
+    }
+
+    return Array.from(assets);
+  }
+
   /**
    * Build symbol list for the given market type.
    * Spot: BTC/USDT. Futures: BTC/USDT:USDT (perpetual) or exchange-specific.
+   * BUSD only for Binance (Binance-specific stablecoin).
    */
   private buildSymbolsForMarket(
     exchange: any,
@@ -279,7 +315,8 @@ export class CcxtService {
     marketType: 'spot' | 'future',
   ): string[] {
     const symbolsToFetch: string[] = [];
-    const quoteCurrencies = ['USDT', 'USDC', 'BTC', 'ETH', 'EUR'];
+    const quoteCurrencies = ['USDT', 'USDC', 'USD', 'BTC', 'ETH', 'EUR'];
+    if (CcxtService.isBinance(exchange)) quoteCurrencies.push('BUSD');
     const stablecoins = new Set([
       'USDT', 'USDC', 'USD', 'BUSD', 'DAI', 'TUSD', 'FDUSD', 'EUR',
     ]);

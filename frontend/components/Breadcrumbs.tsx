@@ -7,7 +7,8 @@ import { Fragment, useMemo } from 'react';
 // ── Map each route segment to its label ──
 const ROUTE_LABELS: Record<string, string> = {
   portfolio: 'Portfolio',
-  history: 'Trades',
+  history: 'Spot',
+  futures: 'Futuros',
   integrations: 'Integrações',
   taxes: 'Impostos',
   alerts: 'Estatísticas',
@@ -31,6 +32,7 @@ const SECTION_MAP: Record<string, { label: string }> = {
   portfolio:     { label: 'Principal' },
   integrations:  { label: 'Principal' },
   history:       { label: 'Principal' },
+  futures:       { label: 'Principal' },
   alerts:        { label: 'Principal' },
   analytics:     { label: 'Principal' },
   taxes:         { label: 'Principal' },

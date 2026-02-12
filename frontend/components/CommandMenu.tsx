@@ -23,6 +23,7 @@ import {
   GitCompare,
   PenLine,
   BookOpen,
+  CandlestickChart,
 } from 'lucide-react';
 
 interface SearchResult {
@@ -37,7 +38,8 @@ interface SearchResult {
 const PAGES: SearchResult[] = [
   { id: 'portfolio', label: 'Portfolio', href: '/dashboard/portfolio', icon: <Wallet className="h-4 w-4" />, category: 'page' },
   { id: 'integrations', label: 'Integrações', href: '/dashboard/integrations', icon: <Link2 className="h-4 w-4" />, category: 'page' },
-  { id: 'trades', label: 'Trades', href: '/dashboard/history', icon: <History className="h-4 w-4" />, category: 'page' },
+  { id: 'spot', label: 'Spot', href: '/dashboard/history', icon: <History className="h-4 w-4" />, category: 'page' },
+  { id: 'futures', label: 'Futuros', href: '/dashboard/futures', icon: <CandlestickChart className="h-4 w-4" />, category: 'page' },
   { id: 'analytics', label: 'Estatísticas', href: '/dashboard/analytics', icon: <BarChart3 className="h-4 w-4" />, category: 'page' },
   { id: 'taxes', label: 'Impostos', href: '/dashboard/taxes', icon: <Receipt className="h-4 w-4" />, category: 'page' },
   { id: 'feed', label: 'Feed', href: '/dashboard/feed', icon: <Newspaper className="h-4 w-4" />, category: 'page' },
