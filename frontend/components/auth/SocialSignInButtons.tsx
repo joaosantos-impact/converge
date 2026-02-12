@@ -23,9 +23,12 @@ export function SocialSignInButtons({
     onError?.(null);
     onSocialLoadingChange(provider);
     try {
+      const base = typeof window !== "undefined" ? window.location.origin : "";
+      const path = callbackUrl.startsWith("/") ? callbackUrl : `/${callbackUrl}`;
+      const absoluteCallbackUrl = base ? `${base}${path}` : callbackUrl;
       await signIn.social({
         provider,
-        callbackURL: callbackUrl,
+        callbackURL: absoluteCallbackUrl,
       });
     } catch {
       onError?.("Não foi possível iniciar sessão. Tenta novamente.");
