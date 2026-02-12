@@ -18,6 +18,7 @@ import {
   SidebarSeparator,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { ConvergeLogo } from "@/components/ConvergeLogo";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -111,12 +112,10 @@ export function AppSidebar() {
 
   return (
     <Sidebar className="border-r-0">
-      <SidebarHeader className="px-2.5 py-2">
-        <Link href="/dashboard/portfolio" onClick={closeSidebarIfMobile} className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center bg-foreground shrink-0">
-            <span className="text-[10px] font-bold text-background">C</span>
-          </div>
-          <span className="text-sm font-semibold tracking-tight">Converge</span>
+      <SidebarHeader className="pt-4 pl-4 pr-2.5">
+        <Link href="/dashboard/portfolio" onClick={closeSidebarIfMobile} className="flex items-center gap-2.5 min-h-8 pl-2.5">
+          <ConvergeLogo size={44} className="shrink-0" />
+          <span className="text-2xl font-semibold text-black dark:text-white font-brand">Converge</span>
         </Link>
       </SidebarHeader>
 

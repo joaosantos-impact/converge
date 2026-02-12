@@ -178,3 +178,9 @@
 .font-display {
   font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
 }
+
+/* Brand wordmark - Poppins Medium */
+.font-brand {
+  font-family: var(--font-brand), var(--font-sans), system-ui, sans-serif;
+  font-weight: 500 !important;
+}

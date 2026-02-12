@@ -410,7 +410,7 @@ export function TradeHistoryView({ marketType, title, emptyMessage = 'Sem opera√
             </FadeIn>
           )}
           </div>
-          <div className="flex flex-wrap gap-3 lg:flex-col lg:flex-nowrap lg:gap-3 pt-5.5">
+          <div className={`flex flex-wrap gap-3 lg:flex-col lg:flex-nowrap lg:gap-3 lg:items-stretch ${groupedTrades.length > 0 ? 'lg:pt-6' : ''}`}>
             <div className="border border-border bg-card px-4 py-3 min-w-[140px] lg:min-w-0 shrink-0">
               <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Total</p>
               <p className="text-lg font-medium mt-0.5 font-display break-words">{allTradesData?.total || 0}</p>

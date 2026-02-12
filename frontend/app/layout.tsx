@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Instrument_Serif, Space_Grotesk } from "next/font/google";
+import { Inter, Instrument_Serif, Poppins, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { Toaster } from "@/components/ui/sonner";
@@ -22,6 +22,13 @@ const instrumentSerif = Instrument_Serif({
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
   variable: "--font-display",
+  display: "swap",
+});
+
+const poppins = Poppins({
+  subsets: ["latin"],
+  weight: "500",
+  variable: "--font-brand",
   display: "swap",
 });
 
@@ -77,7 +84,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt" className={`${inter.variable} ${instrumentSerif.variable} ${spaceGrotesk.variable}`} suppressHydrationWarning>
+    <html lang="pt" className={`${inter.variable} ${instrumentSerif.variable} ${spaceGrotesk.variable} ${poppins.variable}`} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{
