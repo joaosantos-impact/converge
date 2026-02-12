@@ -50,6 +50,8 @@ async function proxy(
   const backendUrl = `${getBackendUrl()}/api/${pathString}${queryString}`;
 
   const headers = new Headers(request.headers);
+  const clientHost = request.headers.get('host') || request.nextUrl.host;
+  headers.set('x-forwarded-host', clientHost);
   headers.delete('host');
 
   // GET and HEAD must not have a body
@@ -68,6 +70,7 @@ async function proxy(
       method: request.method,
       headers,
       body: body && body.byteLength > 0 ? body : undefined,
+      redirect: 'manual',
     });
 
     const responseHeaders = new Headers(backendResponse.headers);
