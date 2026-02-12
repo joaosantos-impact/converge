@@ -107,18 +107,18 @@ export function generateTaxReportPDF(data: TaxReportData): void {
   doc.setFont('helvetica', 'normal');
   doc.text('P&L Realizado (total)', 25, yPos + 9);
   doc.setFontSize(14);
-  doc.setTextColor(...(data.summary.totalRealizedPnL >= 0 ? greenColor : redColor));
+  doc.setTextColor(...(data.summary.totalRealizedPnL >= 0 ? greenColor : primaryColor));
   doc.setFont('helvetica', 'bold');
   doc.text((data.summary.totalRealizedPnL >= 0 ? '+' : '') + fmt(data.summary.totalRealizedPnL), 25, yPos + 21);
 
-  doc.setFillColor(254, 242, 242);
+  doc.setFillColor(254, 249, 195);
   doc.roundedRect(30 + boxW, yPos, boxW, 28, 3, 3, 'F');
   doc.setFontSize(8);
   doc.setTextColor(...mutedColor);
   doc.setFont('helvetica', 'normal');
   doc.text('Imposto Estimado (28%)', 35 + boxW, yPos + 9);
   doc.setFontSize(14);
-  doc.setTextColor(...redColor);
+  doc.setTextColor(...amberColor);
   doc.setFont('helvetica', 'bold');
   doc.text(fmt(data.summary.potentialTax), 35 + boxW, yPos + 21);
 
@@ -132,9 +132,9 @@ export function generateTaxReportPDF(data: TaxReportData): void {
   doc.setFont('helvetica', 'normal');
   doc.text('P&L Isento (>365 dias)', 25, yPos + 9);
   doc.setFontSize(14);
-  doc.setTextColor(...greenColor);
+  doc.setTextColor(...(data.summary.taxFreeRealizedPnL >= 0 ? greenColor : primaryColor));
   doc.setFont('helvetica', 'bold');
-  doc.text(fmt(data.summary.taxFreeRealizedPnL), 25, yPos + 21);
+  doc.text((data.summary.taxFreeRealizedPnL >= 0 ? '+' : '') + fmt(data.summary.taxFreeRealizedPnL), 25, yPos + 21);
 
   doc.setFillColor(254, 249, 195);
   doc.roundedRect(30 + boxW, yPos, boxW, 28, 3, 3, 'F');
@@ -146,6 +146,12 @@ export function generateTaxReportPDF(data: TaxReportData): void {
   doc.setTextColor(...amberColor);
   doc.setFont('helvetica', 'bold');
   doc.text(fmt(data.summary.taxableRealizedPnL), 35 + boxW, yPos + 21);
+  if (data.summary.taxableRealizedPnL < 0) {
+    doc.setFontSize(6);
+    doc.setTextColor(...mutedColor);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Declara no Anexo G — compensa ganhos futuros', 35 + boxW, yPos + 26);
+  }
 
   yPos += 35;
 
@@ -229,8 +235,8 @@ export function generateTaxReportPDF(data: TaxReportData): void {
       doc.text(fmt(sale.costBasis), xP, yPos + 4);
       xP += saleColW[3];
 
-      // P&L
-      doc.setTextColor(...(sale.realizedPnL >= 0 ? greenColor : redColor));
+      // P&L (verde para lucro, neutro para perda — nada disto é mau)
+      doc.setTextColor(...(sale.realizedPnL >= 0 ? greenColor : primaryColor));
       doc.text((sale.realizedPnL >= 0 ? '+' : '') + fmt(sale.realizedPnL), xP, yPos + 4);
       xP += saleColW[4];
 
@@ -239,10 +245,11 @@ export function generateTaxReportPDF(data: TaxReportData): void {
       doc.text(`${sale.holdingDays}d`, xP, yPos + 4);
       xP += saleColW[5];
 
-      // Status
-      doc.setTextColor(...(sale.isTaxFree ? greenColor : amberColor));
+      // Status: isento se detenção >365d OU se for perda (só lucros são tributáveis)
+      const efectivoIsento = sale.isTaxFree || sale.realizedPnL < 0;
+      doc.setTextColor(...(efectivoIsento ? greenColor : amberColor));
       doc.setFont('helvetica', 'bold');
-      doc.text(sale.isTaxFree ? 'Isento' : 'Tributável', xP, yPos + 4);
+      doc.text(efectivoIsento ? 'Isento' : 'Tributável', xP, yPos + 4);
       doc.setFont('helvetica', 'normal');
 
       yPos += 8;
@@ -329,6 +336,7 @@ export function generateTaxReportPDF(data: TaxReportData): void {
   doc.setFont('helvetica', 'italic');
   doc.text('Este relatório é meramente informativo e não constitui aconselhamento fiscal.', pageWidth / 2, yPos, { align: 'center' });
   doc.text(`Regime fiscal: Portugal | Método: FIFO | Isenção: >365 dias | Taxa: 28% | Moeda: ${data.currency}`, pageWidth / 2, yPos + 4, { align: 'center' });
+  doc.text('Declara todas as vendas no Anexo G — mesmo perdas (compensam ganhos futuros).', pageWidth / 2, yPos + 8, { align: 'center' });
 
   doc.save(`converge-impostos-${data.year}.pdf`);
 }

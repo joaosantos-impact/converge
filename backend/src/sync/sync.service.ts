@@ -5,18 +5,25 @@ import { CcxtService } from '../exchanges/ccxt.service';
 const SYNC_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 const STALE_RUNNING_MS = 10 * 60 * 1000; // 10 min — treat orphaned "running" as failed
 
-// Common base assets for first sync — ensures we fetch trades for sold-out positions
-// (on first sync we have no previouslyTradedAssets, so we'd miss symbols not in balance)
-const COMMON_BASE_ASSETS = [
+const MS_PER_YEAR = 365 * 24 * 60 * 60 * 1000;
+const DEFAULT_YEARS_AGO = 8; // fallback when exchange not in map
+
+// Exchange launch timestamps — always fetch from founding date
+const EXCHANGE_LAUNCH_MS: Record<string, number> = {
+  binance: Date.UTC(2017, 6, 14),   // July 14, 2017
+  bybit: Date.UTC(2018, 2, 11),     // March 11, 2018
+  kraken: Date.UTC(2011, 6, 28),    // July 28, 2011
+  okx: Date.UTC(2017, 0, 1),        // Jan 2017 (OKX/OKCoin)
+  kucoin: Date.UTC(2017, 8, 15),    // Sept 15, 2017
+  mexc: Date.UTC(2018, 3, 1),       // April 2018
+  coinbase: Date.UTC(2012, 5, 1),   // June 2012
+};
+
+// Fallback when exchange markets fail to load — ensures first sync still runs
+const FALLBACK_BASE_ASSETS = [
   'BTC', 'ETH', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE', 'AVAX', 'DOT', 'MATIC',
   'LINK', 'UNI', 'ATOM', 'LTC', 'ETC', 'XLM', 'ALGO', 'FIL', 'VET', 'ICP',
   'NEAR', 'APT', 'ARB', 'OP', 'INJ', 'SUI', 'SEI', 'TIA', 'IMX', 'STX',
-  'RUNE', 'FTM', 'AAVE', 'MKR', 'CRV', 'SAND', 'MANA', 'AXS', 'GALA', 'APE',
-  'PEPE', 'WIF', 'BONK', 'FLOKI', 'SHIB', 'JUP', 'WLD', 'STRK', 'PENDLE',
-  'TRX', 'HBAR', 'TON', 'KAVA', 'DYDX', 'ENA', 'EIGEN', 'ZRO', 'NOT',
-  'FET', 'RENDER', 'TAO', 'ONDO', 'JASMY', 'W', 'PYTH', 'DYM', 'PORTAL',
-  'ALT', 'MANTA', 'ZK', 'BLUR', 'GMX', 'LDO', '1INCH', 'SNX', 'COMP',
-  'YFI', 'SUSHI', 'CAKE', 'EPIC', 'MEME', 'ORDI', 'SATS', 'RATS', '1000SATS',
 ];
 
 @Injectable()
@@ -302,14 +309,17 @@ export class SyncService {
       select: { timestamp: true },
     });
 
-    // First sync: fetch up to 8 years of trade history for comprehensive tax/FIFO tracking
+    // First sync: always use exchange founding date (full history)
     // Incremental syncs: only fetch from last known trade
+    const exchangeId = (account.exchange || '').toLowerCase();
+    const launchMs = EXCHANGE_LAUNCH_MS[exchangeId];
+    const fallbackSince = Date.now() - DEFAULT_YEARS_AGO * MS_PER_YEAR;
     const sinceTime = lastTrade
       ? lastTrade.timestamp.getTime() + 1
-      : Date.now() - 7 * 365 * 24 * 60 * 60 * 1000;
+      : (launchMs ?? fallbackSince);
 
-    // Include assets from: balances, previously traded, AND common assets
-    // Common assets are ALWAYS included so we never miss sold-out positions (e.g. sold all ADA in March)
+    // Include assets from: balances, previously traded, AND this exchange's markets
+    // Per-exchange assets so no exchange-specific coins are left behind
     const balanceAssets = balances.map((b) => b.asset);
     const previouslyTradedAssets = await this.prisma.trade.findMany({
       where: { exchangeAccountId: account.id },
@@ -319,12 +329,25 @@ export class SyncService {
     const tradedBaseAssets = previouslyTradedAssets.map((t) =>
       t.symbol.split('/')[0]?.split(':')[0] || t.symbol.split('/')[0],
     ).filter(Boolean);
+
+    let exchangeBaseAssets: string[] = [];
+    try {
+      exchangeBaseAssets = this.ccxt.getBaseAssetsFromMarkets(exchange, 'spot');
+    } catch (e) {
+      this.logger.warn(
+        `Could not get markets for ${account.exchange}, using fallback assets: ${(e as Error).message}`,
+      );
+      exchangeBaseAssets = FALLBACK_BASE_ASSETS;
+    }
+
     const assets = [
-      ...new Set([...balanceAssets, ...tradedBaseAssets, ...COMMON_BASE_ASSETS]),
+      ...new Set([...balanceAssets, ...tradedBaseAssets, ...exchangeBaseAssets]),
     ];
     if (!lastTrade) {
+      const sinceDate = new Date(sinceTime).toISOString().slice(0, 10);
+      const source = launchMs != null ? `${account.exchange} founding` : 'fallback';
       this.logger.log(
-        `First sync for ${account.name}: fetching trades for ${assets.length} assets (balances + common pairs)`,
+        `First sync for ${account.name}: fetching trades for ${assets.length} assets since ${sinceDate} (${source})`,
       );
     }
 

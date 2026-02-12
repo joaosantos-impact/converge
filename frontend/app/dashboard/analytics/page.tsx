@@ -21,6 +21,7 @@ import {
   D3LineChart,
 } from '@/components/charts';
 import { getAvailableYears } from '@/lib/date-utils';
+import { buildAssetPriceMap, feeToUsd, processFIFO } from '@/lib/fifo';
 
 const MONTH_NAMES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
@@ -46,14 +47,30 @@ export default function AnalyticsPage() {
   const router = useRouter();
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
 
-  const { data: tradesData, isLoading } = useTrades(0, undefined, 50000, {
-    year: selectedYear === 'all' ? 'all' : selectedYear,
+  // Fetch ALL trades (like taxes page) for correct FIFO-based P&L
+  const { data: tradesData, isLoading } = useTrades(0, undefined, 100000, {
+    page: 1,
     marketType: 'all',
   });
-  const trades = tradesData?.trades ?? [];
-  const backendStats = tradesData?.stats;
+  const allTrades = useMemo(() => tradesData?.trades ?? [], [tradesData?.trades]);
 
-  const tradesByYear = trades;
+  const { sales, priceMap } = useMemo(() => {
+    const { sales: s } = processFIFO(allTrades);
+    const pm = buildAssetPriceMap(allTrades);
+    return { sales: s, priceMap: pm };
+  }, [allTrades]);
+
+  const tradesByYear = useMemo(() => {
+    if (selectedYear === 'all') return allTrades;
+    const y = selectedYear as number;
+    return allTrades.filter((t) => new Date(t.timestamp as unknown as string).getFullYear() === y);
+  }, [allTrades, selectedYear]);
+
+  const salesInPeriod = useMemo(() => {
+    if (selectedYear === 'all') return sales;
+    const y = selectedYear as number;
+    return sales.filter((s) => s.date.getFullYear() === y);
+  }, [sales, selectedYear]);
 
   const volumeByAsset = useMemo(() => {
     const map = new Map<string, number>();
@@ -73,30 +90,42 @@ export default function AnalyticsPage() {
     const buys = tradesByYear.filter((t) => t.side === 'buy').length;
     const sells = tradesByYear.filter((t) => t.side === 'sell').length;
     const uniqueAssets = new Set(tradesByYear.map((t) => getBaseAsset(t.symbol))).size;
+    const totalVolume = tradesByYear.reduce((s, t) => s + t.cost, 0);
+    const totalFees = tradesByYear.reduce((s, t) => s + feeToUsd(t, priceMap), 0);
+    const totalPnl = salesInPeriod.reduce((s, sale) => s + sale.realizedPnL, 0);
     return {
       totalTrades: tradesByYear.length,
-      totalVolume: backendStats?.totalVolume ?? tradesByYear.reduce((s, t) => s + t.cost, 0),
-      totalFees: backendStats?.totalFees ?? 0,
+      totalVolume,
+      totalFees,
       buys,
       sells,
-      totalPnl: backendStats?.totalPnl ?? tradesByYear.reduce((s, t) => s + (t.pnl ?? 0), 0),
+      totalPnl,
       uniqueAssets,
     };
-  }, [tradesByYear, backendStats]);
+  }, [tradesByYear, salesInPeriod, priceMap]);
 
   const bestAssetByPnl = useMemo((): { asset: string; pnl: number } | null => {
-    const pnlByAsset = new Map<string, number>();
-    tradesByYear.forEach((t) => {
-      const base = getBaseAsset(t.symbol);
-      const pnl = t.pnl ?? 0;
-      pnlByAsset.set(base, (pnlByAsset.get(base) ?? 0) + pnl);
+    const map = new Map<string, number>();
+    salesInPeriod.forEach((s) => {
+      map.set(s.baseAsset, (map.get(s.baseAsset) ?? 0) + s.realizedPnL);
     });
     let best: { asset: string; pnl: number } | null = null;
-    pnlByAsset.forEach((pnl, asset) => {
-      if (pnl > 0 && (!best || pnl > best.pnl)) best = { asset, pnl };
+    map.forEach((pnl, asset) => {
+      if (!best || pnl > best.pnl) best = { asset, pnl };
     });
     return best;
-  }, [tradesByYear]);
+  }, [salesInPeriod]);
+
+  const pnlByAsset = useMemo(() => {
+    const map = new Map<string, number>();
+    salesInPeriod.forEach((s) => {
+      map.set(s.baseAsset, (map.get(s.baseAsset) ?? 0) + s.realizedPnL);
+    });
+    return Array.from(map.entries())
+      .map(([asset, pnl]) => ({ label: asset, value: pnl }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+  }, [salesInPeriod]);
 
   const topExchangeByVolume = useMemo((): { exchange: string; volume: number } | null => {
     const volumeByExchange = new Map<string, number>();
@@ -126,16 +155,21 @@ export default function AnalyticsPage() {
 
   const isAllYears = selectedYear === 'all';
 
-  /** P&L e volume por período: por ano quando "Todos", por mês quando ano específico */
+  /** P&L (FIFO) e volume por período: por ano quando "Todos", por mês quando ano específico */
   const tradesByPeriod = useMemo(() => {
     if (isAllYears) {
       const byYear = new Map<number, { volumeCompra: number; volumeVenda: number; pnl: number }>();
-      tradesByYear.forEach((t) => {
+      allTrades.forEach((t) => {
         const y = new Date(t.timestamp as unknown as string).getFullYear();
         const entry = byYear.get(y) ?? { volumeCompra: 0, volumeVenda: 0, pnl: 0 };
         if (t.side === 'buy') entry.volumeCompra += t.cost;
         else entry.volumeVenda += t.cost;
-        entry.pnl += t.pnl ?? 0;
+        byYear.set(y, entry);
+      });
+      sales.forEach((s) => {
+        const y = s.date.getFullYear();
+        const entry = byYear.get(y) ?? { volumeCompra: 0, volumeVenda: 0, pnl: 0 };
+        entry.pnl += s.realizedPnL;
         byYear.set(y, entry);
       });
       const yearsSorted = Array.from(byYear.keys()).sort((a, b) => a - b);
@@ -147,7 +181,7 @@ export default function AnalyticsPage() {
       const year = selectedYear as number;
       const byMonth = new Map<string, { volumeCompra: number; volumeVenda: number; pnl: number }>();
       for (const m of MONTH_NAMES) byMonth.set(m, { volumeCompra: 0, volumeVenda: 0, pnl: 0 });
-      tradesByYear
+      allTrades
         .filter((t) => new Date(t.timestamp as unknown as string).getFullYear() === year)
         .forEach((t) => {
           const month = new Date(t.timestamp as unknown as string).getMonth();
@@ -155,15 +189,21 @@ export default function AnalyticsPage() {
           const entry = byMonth.get(key)!;
           if (t.side === 'buy') entry.volumeCompra += t.cost;
           else entry.volumeVenda += t.cost;
-          entry.pnl += (t.pnl ?? 0);
           byMonth.set(key, entry);
+        });
+      sales
+        .filter((s) => s.date.getFullYear() === year)
+        .forEach((s) => {
+          const key = MONTH_NAMES[s.date.getMonth()];
+          const entry = byMonth.get(key)!;
+          entry.pnl += s.realizedPnL;
         });
       return MONTH_NAMES.map((m) => {
         const e = byMonth.get(m)!;
         return { x: m, volumeCompra: e.volumeCompra, volumeVenda: e.volumeVenda, pnl: e.pnl };
       });
     }
-  }, [tradesByYear, selectedYear, isAllYears]);
+  }, [allTrades, sales, selectedYear, isAllYears]);
 
   useEffect(() => {
     if (isPending) return;
@@ -243,8 +283,8 @@ export default function AnalyticsPage() {
               <AssetIcon symbol={bestAssetByPnl.asset} size={48} />
               <div>
                 <p className="text-sm font-medium">Asset com mais lucro</p>
-                <p className="text-xs text-muted-foreground">
-                  {bestAssetByPnl.asset} em {selectedYear === 'all' ? 'todo o período' : selectedYear}: +{formatValue(bestAssetByPnl.pnl)}
+                <p className={`text-xs ${bestAssetByPnl.pnl >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                  {bestAssetByPnl.asset} em {selectedYear === 'all' ? 'todo o período' : selectedYear}: {bestAssetByPnl.pnl >= 0 ? '+' : ''}{formatValue(bestAssetByPnl.pnl)}
                 </p>
               </div>
             </div>
@@ -321,6 +361,31 @@ export default function AnalyticsPage() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      </FadeIn>
+
+      {/* P&L por Asset */}
+      <FadeIn delay={0.11}>
+        <div className="border border-border bg-card">
+          <div className="px-4 py-3 border-b border-border">
+            <p className="text-xs font-medium">P&L por Asset</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Lucro ou prejuízo por ativo no período</p>
+          </div>
+          <div className="p-4">
+            {pnlByAsset.length > 0 ? (
+              <D3BarChart
+                data={pnlByAsset}
+                height={280}
+                formatValue={formatValue}
+                showMax={false}
+                diverging
+              />
+            ) : (
+              <div className="h-[280px] flex items-center justify-center text-muted-foreground text-sm">
+                Sem trades neste período
+              </div>
+            )}
           </div>
         </div>
       </FadeIn>
