@@ -150,22 +150,6 @@ export function TradeHistoryView({ marketType, title, emptyMessage = 'Sem opera�
     return { totalPnl: pnl, totalFees: fees, priceMap: pm };
   }, [allTradesData?.trades, selectedYear]);
 
-  interface GroupedTrades {
-    date: string;
-    trades: typeof trades;
-  }
-
-  const groupedTrades: GroupedTrades[] = useMemo(() => {
-    return trades.reduce((groups, trade) => {
-      const date = new Date(trade.timestamp).toLocaleDateString('pt-PT', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-      });
-      const existing = groups.find(g => g.date === date);
-      if (existing) existing.trades.push(trade);
-      else groups.push({ date, trades: [trade] });
-      return groups;
-    }, [] as GroupedTrades[]);
-  }, [trades]);
 
   const exportCSV = () => {
     const allTrades = allTradesData?.trades || [];
@@ -201,7 +185,7 @@ export function TradeHistoryView({ marketType, title, emptyMessage = 'Sem opera�
 
   const showFutureBadge = marketType === 'spot'; // Hide redundant badge on futures page
 
-  if (isPending || initialLoading || (showSyncing && groupedTrades.length === 0)) {
+  if (isPending || initialLoading || (showSyncing && trades.length === 0)) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-8 w-32" />
@@ -281,100 +265,102 @@ export function TradeHistoryView({ marketType, title, emptyMessage = 'Sem opera�
       <FadeIn delay={0.05}>
         <div className="grid gap-4 lg:grid-cols-[1fr_220px] lg:items-start">
           <div className="min-w-0 space-y-3">
-        {groupedTrades.length === 0 ? (
+        {trades.length === 0 ? (
           <div className="p-12 border border-border bg-card text-center">
             <p className="text-muted-foreground text-sm">{emptyMessage}</p>
           </div>
         ) : (
-          <div className={`space-y-5 transition-opacity ${fetching ? 'opacity-70' : ''}`}>
-            {groupedTrades.map((group) => (
-              <div key={group.date}>
-                <p className="text-[10px] font-medium text-muted-foreground mb-2 capitalize">{group.date}</p>
-                <div className="border border-border overflow-x-auto min-w-0">
-                  <div
-                    className={`grid gap-2 sm:gap-3 px-2 sm:px-3 py-2 border-b border-border bg-muted/30 text-[10px] text-muted-foreground ${
-                      marketType === 'future'
-                        ? 'grid-cols-[minmax(140px,1fr)_minmax(3rem,auto)_minmax(4rem,auto)_minmax(3.5rem,auto)_minmax(3.5rem,auto)_minmax(3rem,auto)] min-w-[600px]'
-                        : 'grid-cols-[minmax(140px,1fr)_minmax(3rem,auto)_minmax(4rem,auto)_minmax(3.5rem,auto)_minmax(3rem,auto)] min-w-[520px]'
-                    }`}
-                  >
-                    <span className="font-medium">Par · hora</span>
-                    <span className="text-right min-w-[3rem] font-medium" title="Quantidade">Qtd</span>
-                    <span className="text-right min-w-[4.5rem] font-medium" title="Preço por unidade">Preço</span>
-                    <span className="text-right min-w-[4rem] font-medium" title="Valor total">Total</span>
-                    {marketType === 'future' && (
-                      <span className="text-right min-w-[3.5rem] font-medium" title="Lucro ou perda realizados">P&L</span>
-                    )}
-                    <span className="text-right min-w-[3.5rem] font-medium" title="Taxa paga à exchange">Comissão</span>
-                  </div>
-                  <div className="divide-y divide-border">
-                    {group.trades.map((trade, i) => (
-                      <div
-                        key={trade.id || i}
-                        className={`grid gap-2 sm:gap-3 items-center p-2 sm:p-3 bg-card hover:bg-muted/50 transition-colors ${
-                          marketType === 'future'
-                            ? 'grid-cols-[minmax(140px,1fr)_minmax(3rem,auto)_minmax(4rem,auto)_minmax(3.5rem,auto)_minmax(3.5rem,auto)_minmax(3rem,auto)] min-w-[600px]'
-                            : 'grid-cols-[minmax(140px,1fr)_minmax(3rem,auto)_minmax(4rem,auto)_minmax(3.5rem,auto)_minmax(3rem,auto)] min-w-[520px]'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-0.5 shrink-0 bg-foreground self-stretch min-h-8" />
-                          <AssetIcon symbol={trade.symbol.split('/')[0]?.split(':')[0] || trade.symbol.split('/')[0] || trade.symbol} size={20} className="shrink-0" />
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-medium text-xs">{trade.symbol}</span>
-                              <span className="text-[9px] px-1.5 py-0.5 bg-muted text-foreground">
-                                {marketType === 'future' ? (trade.side === 'buy' ? 'LONG' : 'SHORT') : (trade.side === 'buy' ? 'COMPRA' : 'VENDA')}
-                              </span>
-                              {showFutureBadge && trade.marketType === 'future' && (
-                                <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                                  FUTUROS
-                                </span>
-                              )}
-                              {trade.isDelisted && (
-                                <span
-                                  className="text-[9px] px-1.5 py-0.5 bg-muted text-muted-foreground"
-                                  title="Par deslistado da exchange"
-                                >
-                                  DESLISTADO
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-[10px] text-muted-foreground mt-0.5">
-                              {new Date(trade.timestamp).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
-                              {trade.exchange && ` · ${trade.exchange}`}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="text-right text-xs min-w-[3rem] max-w-[4rem] overflow-hidden text-ellipsis tabular-nums" title={formatQuantityCompact(trade.amount).full}>
-                          {formatQuantityCompact(trade.amount).display}
-                        </div>
-                        <div className="text-right text-xs min-w-[4.5rem] max-w-[6rem] overflow-hidden text-ellipsis text-muted-foreground tabular-nums" title={formatPriceCompact(trade.price, formatPrice).full}>
-                          {formatPriceCompact(trade.price, formatPrice).display}
-                        </div>
-                        <div className="text-right text-xs font-medium min-w-[4rem]">
-                          {formatValue(trade.cost)}
-                        </div>
-                        {marketType === 'future' && (
-                          <div className="text-right text-xs min-w-[3.5rem]">
-                            {trade.pnl != null ? (
-                              <span className={trade.pnl >= 0 ? 'text-emerald-500 font-medium' : 'text-red-500 font-medium'}>
-                                {trade.pnl >= 0 ? '+' : ''}{formatValue(trade.pnl)}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </div>
+          <div className={`border border-border overflow-x-auto min-w-0 transition-opacity ${fetching ? 'opacity-70' : ''}`}>
+            <div
+              className={`grid gap-x-2 gap-y-2 sm:gap-x-3 px-2 sm:px-3 py-2 border-b border-border bg-muted/30 text-[10px] text-muted-foreground items-end ${
+                marketType === 'future'
+                  ? 'grid-cols-[minmax(140px,1fr)_minmax(4rem,auto)_minmax(7rem,auto)_minmax(3rem,auto)_minmax(4rem,auto)_minmax(3.5rem,auto)_minmax(3.5rem,auto)_minmax(3rem,auto)] min-w-[720px]'
+                  : 'grid-cols-[minmax(140px,1fr)_minmax(4rem,auto)_minmax(7rem,auto)_minmax(3rem,auto)_minmax(4rem,auto)_minmax(3.5rem,auto)_minmax(3rem,auto)] min-w-[640px]'
+              }`}
+            >
+              <span className="font-medium justify-self-start">Par</span>
+              <span className="font-medium justify-self-start">Tipo</span>
+              <span className="font-medium justify-self-start">Data</span>
+              <span className="text-center min-w-[3rem] font-medium justify-self-center" title="Quantidade">Qtd</span>
+              <span className="text-center min-w-[4.5rem] font-medium justify-self-center" title="Preço por unidade">Preço</span>
+              <span className="text-center min-w-[4rem] font-medium justify-self-center" title="Valor total">Total</span>
+              {marketType === 'future' && (
+                <span className="text-center min-w-[3.5rem] font-medium justify-self-center" title="Lucro ou perda realizados">P&L</span>
+              )}
+              <span className="text-center min-w-[3.5rem] font-medium justify-self-center" title="Taxa paga à exchange">Comissão</span>
+            </div>
+            <div className="divide-y divide-border">
+              {trades.map((trade, i) => (
+                <div
+                  key={trade.id || i}
+                  className={`grid gap-x-2 gap-y-2 sm:gap-x-3 items-center p-2 sm:p-3 bg-card hover:bg-muted/50 transition-colors ${
+                    marketType === 'future'
+                      ? 'grid-cols-[minmax(140px,1fr)_minmax(4rem,auto)_minmax(7rem,auto)_minmax(3rem,auto)_minmax(4rem,auto)_minmax(3.5rem,auto)_minmax(3.5rem,auto)_minmax(3rem,auto)] min-w-[720px]'
+                      : 'grid-cols-[minmax(140px,1fr)_minmax(4rem,auto)_minmax(7rem,auto)_minmax(3rem,auto)_minmax(4rem,auto)_minmax(3.5rem,auto)_minmax(3rem,auto)] min-w-[640px]'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0 justify-self-start">
+                    <div className="w-0.5 shrink-0 bg-foreground self-stretch min-h-8" />
+                    <AssetIcon symbol={trade.symbol.split('/')[0]?.split(':')[0] || trade.symbol.split('/')[0] || trade.symbol} size={20} className="shrink-0" />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-xs">{trade.symbol}</span>
+                        {showFutureBadge && trade.marketType === 'future' && (
+                          <span className="text-[9px] px-1.5 py-0.5 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                            FUTUROS
+                          </span>
                         )}
-                        <div className="text-right text-xs min-w-[3.5rem] text-muted-foreground">
-                          {trade.fee > 0 ? formatValue(feeToUsd(trade, priceMap)) : '—'}
-                        </div>
+                        {trade.isDelisted && (
+                          <span
+                            className="text-[9px] px-1.5 py-0.5 bg-muted text-muted-foreground"
+                            title="Par deslistado da exchange"
+                          >
+                            DESLISTADO
+                          </span>
+                        )}
                       </div>
-                    ))}
+                      {trade.exchange && (
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{trade.exchange}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="shrink-0 justify-self-start">
+                    <span className="text-[9px] px-1.5 py-0.5 bg-muted text-foreground font-medium">
+                      {marketType === 'future' ? (trade.side === 'buy' ? 'LONG' : 'SHORT') : (trade.side === 'buy' ? 'COMPRA' : 'VENDA')}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-muted-foreground shrink-0 justify-self-start">
+                    {new Date(trade.timestamp).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    <span className="block text-[10px] opacity-80">
+                      {new Date(trade.timestamp).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <div className="text-right text-xs min-w-[3rem] max-w-[4rem] overflow-hidden text-ellipsis tabular-nums" title={formatQuantityCompact(trade.amount).full}>
+                    {formatQuantityCompact(trade.amount).display}
+                  </div>
+                  <div className="text-right text-xs min-w-[4.5rem] max-w-[6rem] overflow-hidden text-ellipsis text-muted-foreground tabular-nums" title={formatPriceCompact(trade.price, formatPrice).full}>
+                    {formatPriceCompact(trade.price, formatPrice).display}
+                  </div>
+                  <div className="text-right text-xs font-medium min-w-[4rem]">
+                    {formatValue(trade.cost)}
+                  </div>
+                  {marketType === 'future' && (
+                    <div className="text-right text-xs min-w-[3.5rem]">
+                      {trade.pnl != null ? (
+                        <span className={trade.pnl >= 0 ? 'text-emerald-500 font-medium' : 'text-red-500 font-medium'}>
+                          {trade.pnl >= 0 ? '+' : ''}{formatValue(trade.pnl)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </div>
+                  )}
+                  <div className="text-right text-xs min-w-[3.5rem] text-muted-foreground">
+                    {trade.fee > 0 ? formatValue(feeToUsd(trade, priceMap)) : '—'}
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         )}
           {totalPages > 1 && (
@@ -410,7 +396,7 @@ export function TradeHistoryView({ marketType, title, emptyMessage = 'Sem opera�
             </FadeIn>
           )}
           </div>
-          <div className={`flex flex-wrap gap-3 lg:flex-col lg:flex-nowrap lg:gap-3 lg:items-stretch ${groupedTrades.length > 0 ? 'lg:pt-6' : ''}`}>
+          <div className={`flex flex-wrap gap-3 lg:flex-col lg:flex-nowrap lg:gap-3 lg:items-stretch ${trades.length > 0 ? 'lg:pt-6' : ''}`}>
             <div className="border border-border bg-card px-4 py-3 min-w-[140px] lg:min-w-0 shrink-0">
               <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Total</p>
               <p className="text-lg font-medium mt-0.5 font-display break-words">{allTradesData?.total || 0}</p>
