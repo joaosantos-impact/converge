@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { SignInForm } from "@/components/auth";
 import Link from "next/link";
+import { ConvergeLogo } from "@/components/ConvergeLogo";
 
 export default function SignInPage() {
   return (
@@ -11,10 +12,8 @@ export default function SignInPage() {
           <div className="space-y-8">
             {/* Logo */}
             <div className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center bg-white">
-                <span className="text-sm font-bold text-[#050505]">C</span>
-              </div>
-              <span className="text-sm font-semibold tracking-tight text-white">Converge</span>
+              <ConvergeLogo size={40} invert />
+              <span className="text-base font-semibold tracking-tight text-white font-brand">Converge</span>
             </div>
 
             {/* Title */}
@@ -62,9 +61,9 @@ export default function SignInPage() {
         
         {/* Content */}
         <div className="relative flex flex-col items-center justify-center w-full p-12">
-          {/* Large C logo */}
+          {/* Logo */}
           <div className="w-24 h-24 flex items-center justify-center border border-white/[0.08] bg-white/[0.02] mb-10">
-            <span className="text-4xl font-light text-white/50">C</span>
+            <ConvergeLogo size={96} invert />
           </div>
 
           <p className="text-2xl font-light text-white/40 text-center leading-relaxed max-w-xs" style={{ fontFamily: 'var(--font-serif), Georgia, serif', fontStyle: 'italic' }}>

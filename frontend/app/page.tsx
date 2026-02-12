@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { useSession } from '@/lib/auth-client';
+import { ConvergeLogo } from '@/components/ConvergeLogo';
 
 interface ReviewData {
   id: string;
@@ -421,10 +422,10 @@ export default function LandingPage() {
       }`}>
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center bg-white">
-              <span className="text-xs font-bold text-[#050505]">C</span>
+            <div className="flex h-9 w-9 items-center justify-center bg-white rounded-sm overflow-hidden">
+              <ConvergeLogo size={32} forceBlack />
             </div>
-            <span className="text-sm font-semibold tracking-tight">Converge</span>
+            <span className="text-base font-semibold tracking-tight text-white font-brand">Converge</span>
           </Link>
           <div className="hidden md:flex items-center gap-8 text-[13px] text-white/50">
             <a href="#features" className="hover:text-white transition-colors">Funcionalidades</a>
@@ -750,11 +751,11 @@ export default function LandingPage() {
             sobre o teu portfolio.&rdquo;
           </p>
           <div className="flex items-center justify-center gap-3 mt-8">
-            <div className="w-8 h-8 bg-white/10 flex items-center justify-center text-[10px] font-medium">
-              C
+            <div className="w-8 h-8 flex items-center justify-center">
+              <ConvergeLogo size={40} invert />
             </div>
             <div className="text-left">
-              <p className="text-xs text-white/70 font-medium">Converge</p>
+              <p className="text-sm text-white font-medium font-brand">Converge</p>
               <p className="text-[10px] text-white/40">Crypto Portfolio Tracker</p>
             </div>
           </div>
@@ -873,10 +874,10 @@ export default function LandingPage() {
           <div className="flex flex-col items-center gap-8">
             {/* Brand */}
             <div className="flex items-center gap-2.5">
-              <div className="flex h-7 w-7 items-center justify-center bg-white">
-                <span className="text-xs font-bold text-[#050505]">C</span>
+              <div className="flex h-9 w-9 items-center justify-center bg-white rounded-sm overflow-hidden">
+                <ConvergeLogo size={32} forceBlack />
               </div>
-              <span className="text-sm font-semibold tracking-tight">Converge</span>
+              <span className="text-base font-semibold tracking-tight text-white font-brand">Converge</span>
             </div>
 
             {/* Social — centered */}

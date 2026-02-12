@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { ConvergeLogo } from '@/components/ConvergeLogo';
 
 export default function TermsPage() {
   return (
@@ -7,10 +8,10 @@ export default function TermsPage() {
       <nav className="border-b border-white/[0.06]">
         <div className="max-w-4xl mx-auto px-6 h-16 flex items-center">
           <Link href="/" className="flex items-center gap-2.5">
-            <div className="flex h-7 w-7 items-center justify-center bg-white">
-              <span className="text-xs font-bold text-[#050505]">C</span>
+            <div className="flex h-9 w-9 items-center justify-center bg-white rounded-sm overflow-hidden">
+              <ConvergeLogo size={32} forceBlack />
             </div>
-            <span className="text-sm font-semibold tracking-tight">Converge</span>
+            <span className="text-base font-semibold tracking-tight text-white font-brand">Converge</span>
           </Link>
         </div>
       </nav>
