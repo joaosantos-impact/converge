@@ -316,9 +316,9 @@ export default function ComparePage() {
                     <TooltipProvider delayDuration={200}>
                       <UITooltip>
                         <TooltipTrigger asChild>
-                          <button type="button" className="inline-flex text-muted-foreground hover:text-foreground cursor-help" aria-label="Explicação do índice 100" onClick={(e) => e.stopPropagation()}>
+                          <span role="button" tabIndex={0} className="inline-flex text-muted-foreground hover:text-foreground cursor-help" aria-label="Explicação do índice 100" onClick={(e) => e.stopPropagation()}>
                             <Info className="w-3.5 h-3.5" />
-                          </button>
+                          </span>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="max-w-[260px]">
                           O valor no primeiro dia do período é 100. Nos dias seguintes, 110 significa +10% desde o início e 90 significa -10%. Assim, BTC e um ativo muito mais barato (ex. ADA) aparecem na mesma escala.

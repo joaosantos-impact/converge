@@ -21,7 +21,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const createPostSchema = z.object({
   content: z.string().min(1).max(1000),
-  tradeIds: z.array(z.string()).min(1),
+  tradeIds: z.array(z.string()).default([]),
   showPrice: z.boolean().default(true),
   showAmount: z.boolean().default(true),
   showExchange: z.boolean().default(true),
@@ -149,15 +149,18 @@ export class FeedController {
   async create(@CurrentUser() user: any, @Body() body: any) {
     const data = createPostSchema.parse(body);
 
-    const trades = await this.prisma.trade.findMany({
-      where: {
-        id: { in: data.tradeIds },
-        exchangeAccount: { userId: user.id },
-      },
-      include: { exchangeAccount: { select: { exchange: true } } },
-    });
+    const trades =
+      data.tradeIds.length === 0
+        ? []
+        : await this.prisma.trade.findMany({
+            where: {
+              id: { in: data.tradeIds },
+              exchangeAccount: { userId: user.id },
+            },
+            include: { exchangeAccount: { select: { exchange: true } } },
+          });
 
-    if (trades.length !== data.tradeIds.length) {
+    if (data.tradeIds.length > 0 && trades.length !== data.tradeIds.length) {
       throw new HttpException(
         'Alguns trades não foram encontrados',
         HttpStatus.BAD_REQUEST,
