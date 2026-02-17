@@ -108,9 +108,6 @@ export default function JournalPage() {
       .reduce((sum, t) => sum + (t.pnl || 0), 0);
   }, [recentTrades, selectedTradeIds]);
 
-  // Check if today already has an entry
-  const todayHasEntry = entries.some(e => e.date === today);
-
   const toggleTrade = (tradeId: string) => {
     setSelectedTradeIds(prev =>
       prev.includes(tradeId) ? prev.filter(t => t !== tradeId) : [...prev, tradeId]
@@ -137,12 +134,8 @@ export default function JournalPage() {
       createdAt: new Date().toISOString(),
     };
 
-    // Replace if today already has entry, otherwise add
-    const updated = todayHasEntry
-      ? entries.map(e => e.date === today ? entry : e)
-      : [entry, ...entries];
-
-    saveEntries(updated);
+    // Always add new entry (multiple entries per day allowed)
+    saveEntries([entry, ...entries]);
     setNote('');
     setSelectedTradeIds([]);
     setIsWriting(false);

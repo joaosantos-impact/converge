@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useMemo } from 'react';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -49,21 +50,16 @@ interface SharedPortfolio {
 export default function SharePage() {
   const params = useParams();
   const token = params.token as string;
-  const [data, setData] = useState<SharedPortfolio | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
 
-  useEffect(() => {
-    if (!token) return;
-    fetch(`/api/portfolio/share/${token}`)
-      .then(res => {
-        if (!res.ok) throw new Error('Not found');
-        return res.json();
-      })
-      .then(setData)
-      .catch(() => setError(true))
-      .finally(() => setLoading(false));
-  }, [token]);
+  const { data = null, isLoading: loading, isError: error } = useQuery({
+    queryKey: ['shared-portfolio', token],
+    queryFn: async () => {
+      const res = await fetch(`/api/portfolio/share/${token}`);
+      if (!res.ok) throw new Error('Not found');
+      return res.json() as Promise<SharedPortfolio>;
+    },
+    enabled: !!token,
+  });
 
   const formatEUR = (value: number) =>
     new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value * 0.92);
@@ -244,8 +240,8 @@ export default function SharePage() {
           </div>
 
           <div className="divide-y divide-white/5">
-            {data.portfolio.balances.map((balance, i) => (
-              <div key={i} className="grid grid-cols-12 gap-4 px-6 py-3.5 items-center hover:bg-white/[0.02] transition-colors">
+            {data.portfolio.balances.map((balance) => (
+              <div key={`${balance.asset}-${balance.exchange}`} className="grid grid-cols-12 gap-4 px-6 py-3.5 items-center hover:bg-white/[0.02] transition-colors">
                 <div className="col-span-4 flex items-center gap-3">
                   <AssetIcon symbol={balance.asset} size={32} className="shrink-0 [&_img]:rounded-none" />
                   <div>

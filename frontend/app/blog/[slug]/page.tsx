@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ConvergeLogo } from '@/components/ConvergeLogo';
@@ -18,18 +18,26 @@ interface BlogPost {
 
 export default function BlogPostPage() {
   const { slug } = useParams();
-  const [post, setPost] = useState<BlogPost | null>(null);
-  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!slug) return;
-    fetch(`/api/blog/${slug}`).then(r => {
-      if (r.ok) return r.json();
-      throw new Error('Not found');
-    }).then(setPost).catch(() => {}).finally(() => setLoading(false));
-  }, [slug]);
+  const { data: post = null, isLoading: loading } = useQuery({
+    queryKey: ['blog-post', slug],
+    queryFn: async () => {
+      const r = await fetch(`/api/blog/${slug}`);
+      if (!r.ok) return null;
+      return r.json() as Promise<BlogPost>;
+    },
+    enabled: !!slug,
+  });
 
-  // Simple markdown-ish rendering
+  const renderBoldText = (text: string) => {
+    const parts = text.split(/\*\*(.*?)\*\*/g);
+    return parts.map((part, j) =>
+      j % 2 === 1
+        ? <strong key={j} className="text-white font-medium">{part}</strong>
+        : <span key={j}>{part}</span>
+    );
+  };
+
   const renderContent = (content: string) => {
     return content.split('\n').map((line, i) => {
       if (line.startsWith('### ')) return <h3 key={i} className="text-lg font-medium text-white mt-8 mb-3">{line.slice(4)}</h3>;
@@ -38,9 +46,7 @@ export default function BlogPostPage() {
       if (line.startsWith('- ')) return <li key={i} className="text-sm text-white/55 ml-4 mb-1">{line.slice(2)}</li>;
       if (line.startsWith('> ')) return <blockquote key={i} className="border-l-2 border-white/20 pl-4 text-white/50 italic my-4">{line.slice(2)}</blockquote>;
       if (line.trim() === '') return <br key={i} />;
-      // Bold
-      const formatted = line.replace(/\*\*(.*?)\*\*/g, '<strong class="text-white font-medium">$1</strong>');
-      return <p key={i} className="text-sm text-white/55 leading-relaxed mb-3" dangerouslySetInnerHTML={{ __html: formatted }} />;
+      return <p key={i} className="text-sm text-white/55 leading-relaxed mb-3">{renderBoldText(line)}</p>;
     });
   };
 
@@ -66,7 +72,7 @@ export default function BlogPostPage() {
             <div className="h-8 w-3/4 bg-white/[0.03] animate-pulse" />
             <div className="h-4 w-1/2 bg-white/[0.02] animate-pulse" />
             <div className="mt-12 space-y-3">
-              {[75, 90, 60, 85, 70, 80].map((w, i) => <div key={i} className="h-4 bg-white/[0.02] animate-pulse" style={{ width: `${w}%` }} />)}
+              {[75, 90, 60, 85, 70, 80].map((w) => <div key={w} className="h-4 bg-white/[0.02] animate-pulse" style={{ width: `${w}%` }} />)}
             </div>
           </div>
         ) : !post ? (

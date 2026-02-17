@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useSession } from '@/lib/auth-client';
 import { ConvergeLogo } from '@/components/ConvergeLogo';
 
@@ -353,14 +354,15 @@ export default function LandingPage() {
 
   const isLoggedIn = !isPending && !!session;
 
-  // Fetch reviews from API (with fallback to defaults)
-  const [reviewsData, setReviewsData] = useState<ReviewData[]>([]);
-  useEffect(() => {
-    fetch('/api/reviews')
-      .then(r => r.json())
-      .then(data => { if (Array.isArray(data) && data.length > 0) setReviewsData(data); })
-      .catch(() => {});
-  }, []);
+  const { data: reviewsData = [] } = useQuery({
+    queryKey: ['reviews'],
+    queryFn: async () => {
+      const r = await fetch('/api/reviews');
+      const data = await r.json();
+      return Array.isArray(data) ? data as ReviewData[] : [];
+    },
+    staleTime: 10 * 60 * 1000,
+  });
 
   const displayReviews = reviewsData.length > 0 ? reviewsData : [
     { id: '1', name: 'Miguel S.', role: 'Trader desde 2019', initials: 'MS', text: 'Finalmente consigo ver tudo num só lugar. Tinha trades espalhadas por 4 exchanges e era um caos. O Converge mudou isso completamente.', rating: 5 },
@@ -377,45 +379,6 @@ export default function LandingPage() {
       >
         Saltar para o conteúdo
       </a>
-      <style jsx global>{`
-        @keyframes float-slow {
-          0%, 100% { transform: translateY(0) translateX(0); }
-          50% { transform: translateY(-30px) translateX(15px); }
-        }
-        @keyframes float-slow-reverse {
-          0%, 100% { transform: translateY(0) translateX(0); }
-          50% { transform: translateY(20px) translateX(-20px); }
-        }
-        .animate-float-slow { animation: float-slow 20s ease-in-out infinite; }
-        .animate-float-slow-reverse { animation: float-slow-reverse 25s ease-in-out infinite; }
-        .font-serif-display { font-family: var(--font-serif), Georgia, 'Times New Roman', serif; }
-
-        @keyframes hero-line-drift {
-          0%   { transform: translateY(0px) translateX(0px); }
-          25%  { transform: translateY(-6px) translateX(3px); }
-          50%  { transform: translateY(4px) translateX(-2px); }
-          75%  { transform: translateY(-3px) translateX(5px); }
-          100% { transform: translateY(0px) translateX(0px); }
-        }
-        .animate-hero-line { animation: hero-line-drift 12s ease-in-out infinite; }
-
-        @keyframes scroll-bounce {
-          0%, 100% { transform: translateY(0); opacity: 0.3; }
-          50% { transform: translateY(6px); opacity: 0.7; }
-        }
-        .animate-scroll-bounce { animation: scroll-bounce 2s ease-in-out infinite; }
-
-        /* Respect user preference for reduced motion */
-        @media (prefers-reduced-motion: reduce) {
-          .animate-float-slow,
-          .animate-float-slow-reverse,
-          .animate-hero-line,
-          .animate-scroll-bounce {
-            animation: none !important;
-          }
-        }
-      `}</style>
-
       {/* ──── NAV ──── */}
       <nav className={`fixed top-0 w-full z-50 transition-all duration-300 ${
         scrolled ? 'bg-[#050505]/90 backdrop-blur-md border-b border-white/[0.06]' : ''
@@ -817,7 +780,7 @@ export default function LandingPage() {
 
           <div className="grid md:grid-cols-3 gap-3">
             {displayReviews.map((review, i) => (
-              <Reveal key={i} delay={i * 0.08}>
+              <Reveal key={review.id} delay={i * 0.08}>
                 <div className="group relative p-6 border border-white/[0.08] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/[0.15] transition-all duration-500 h-full overflow-hidden">
                   <div className="absolute top-0 left-0 w-12 h-12 opacity-0 group-hover:opacity-100 transition-opacity duration-700"><div className="absolute top-0 left-0 w-full h-px bg-gradient-to-r from-white/30 to-transparent" /><div className="absolute top-0 left-0 h-full w-px bg-gradient-to-b from-white/30 to-transparent" /></div>
                   <div className="absolute bottom-0 right-0 w-12 h-12 opacity-0 group-hover:opacity-100 transition-opacity duration-700"><div className="absolute bottom-0 right-0 w-full h-px bg-gradient-to-l from-white/30 to-transparent" /><div className="absolute bottom-0 right-0 h-full w-px bg-gradient-to-t from-white/30 to-transparent" /></div>

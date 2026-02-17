@@ -67,23 +67,24 @@ export function TradeHistoryView({ marketType, title, emptyMessage = 'Sem operaÃ
   const { syncing } = useAutoSync();
   const { data: accounts = [] } = useExchangeAccounts();
   const showSyncing = syncing && accounts.length > 0;
-  const [filterAsset, setFilterAsset] = useState<string>(() => searchParams.get('asset') || 'all');
-  const [filterType, setFilterType] = useState<'all' | 'buy' | 'sell'>('all');
-  const [filterExchange, setFilterExchange] = useState<string>('all');
+  const [filterAsset, setFilterAssetRaw] = useState<string>(() => searchParams.get('asset') || 'all');
+  const [filterType, setFilterTypeRaw] = useState<'all' | 'buy' | 'sell'>('all');
+  const [filterExchange, setFilterExchangeRaw] = useState<string>('all');
   const availableYears = useMemo(() => getAvailableYears(), []);
-  const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
+  const [selectedYear, setSelectedYearRaw] = useState<number | 'all'>('all');
   const [page, setPage] = useState(1);
+
+  const setFilterAsset = (v: string) => { setFilterAssetRaw(v); setPage(1); };
+  const setFilterType = (v: 'all' | 'buy' | 'sell') => { setFilterTypeRaw(v); setPage(1); };
+  const setFilterExchange = (v: string) => { setFilterExchangeRaw(v); setPage(1); };
+  const setSelectedYear = (v: number | 'all') => { setSelectedYearRaw(v); setPage(1); };
 
   useEffect(() => {
     const assetFromUrl = searchParams.get('asset');
     if (assetFromUrl) {
-      queueMicrotask(() => setFilterAsset(assetFromUrl));
+      queueMicrotask(() => setFilterAssetRaw(assetFromUrl));
     }
   }, [searchParams]);
-
-  // Reset page when filters change
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- reset pagination on filter change is intentional
-  useEffect(() => { setPage(1); }, [filterType, filterExchange, filterAsset, selectedYear]);
 
   const tradesParams = {
     days: 0,

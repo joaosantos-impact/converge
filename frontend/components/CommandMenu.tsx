@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
   Dialog,
@@ -60,22 +61,24 @@ const COMMON_ASSETS = [
 export function CommandMenu() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [query, setQuery] = useState('');
+  const [query, setQueryRaw] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [portfolioAssets, setPortfolioAssets] = useState<string[]>([]);
 
-  // Fetch user's assets for search
-  useEffect(() => {
-    fetch('/api/portfolio')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data?.balances) {
-          const assets = [...new Set(data.balances.map((b: { asset: string }) => b.asset))];
-          setPortfolioAssets(assets as string[]);
-        }
-      })
-      .catch(() => {});
-  }, []);
+  const setQuery = (v: string) => { setQueryRaw(v); setSelectedIndex(0); };
+
+  const { data: portfolioAssets = [] } = useQuery({
+    queryKey: ['command-menu-assets'],
+    queryFn: async () => {
+      const res = await fetch('/api/portfolio');
+      if (!res.ok) return [];
+      const data = await res.json();
+      if (data?.balances) {
+        return [...new Set(data.balances.map((b: { asset: string }) => b.asset))] as string[];
+      }
+      return [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Global Cmd+K shortcut
   useEffect(() => {
@@ -83,7 +86,7 @@ export function CommandMenu() {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
         setOpen(prev => !prev);
-        setQuery('');
+        setQueryRaw('');
         setSelectedIndex(0);
       }
     };
@@ -143,8 +146,6 @@ export function CommandMenu() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [open, results, selectedIndex, router]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { setSelectedIndex(0); }, [query]);
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -156,7 +157,6 @@ export function CommandMenu() {
         <div className="flex items-center gap-3 px-4 border-b border-border">
           <Search className="h-4 w-4 text-muted-foreground shrink-0" />
           <input
-            autoFocus
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Procurar páginas, assets..."

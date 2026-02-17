@@ -2,7 +2,7 @@
   "id": "converge-crypto",
   "name": "Converge - Crypto Portfolio Tracker",
   "short_name": "Converge",
-  "description": "Acompanha e gere o teu portfolio crypto em múltiplas exchanges",
+  "description": "Cálculo de impostos e tracking de portfolio crypto em múltiplas exchanges",
   "start_url": "/dashboard/portfolio",
   "scope": "/",
   "display": "standalone",

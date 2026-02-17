@@ -37,12 +37,12 @@ export const metadata: Metadata = {
     default: "Converge - Crypto Portfolio Tracker",
     template: "%s | Converge",
   },
-  description: "Acompanha e gere o teu portfolio crypto em múltiplas exchanges. Performance, impostos, feed social e mais.",
+  description: "Cálculo de impostos e tracking de portfolio crypto em múltiplas exchanges. Performance, relatórios fiscais e mais.",
   manifest: "/manifest.json",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://converge.pt"),
   openGraph: {
     title: "Converge - Crypto Portfolio Tracker",
-    description: "Acompanha e gere o teu portfolio crypto em múltiplas exchanges.",
+    description: "Cálculo de impostos e tracking de portfolio crypto em múltiplas exchanges.",
     url: "/",
     siteName: "Converge",
     locale: "pt_PT",
@@ -51,7 +51,7 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "Converge - Crypto Portfolio Tracker",
-    description: "Acompanha e gere o teu portfolio crypto em múltiplas exchanges.",
+    description: "Cálculo de impostos e tracking de portfolio crypto em múltiplas exchanges.",
   },
   robots: {
     index: true,

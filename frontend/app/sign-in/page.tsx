@@ -1,7 +1,13 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { SignInForm } from "@/components/auth";
 import Link from "next/link";
 import { ConvergeLogo } from "@/components/ConvergeLogo";
+
+export const metadata: Metadata = {
+  title: "Entrar",
+  description: "Entra na tua conta Converge para gerir o teu portfolio crypto.",
+};
 
 export default function SignInPage() {
   return (

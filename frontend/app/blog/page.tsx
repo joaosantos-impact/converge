@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { ConvergeLogo } from '@/components/ConvergeLogo';
 
@@ -16,12 +16,14 @@ interface BlogPost {
 }
 
 export default function BlogPage() {
-  const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch('/api/blog').then(r => r.json()).then(data => { setPosts(data); setLoading(false); }).catch(() => setLoading(false));
-  }, []);
+  const { data: posts = [], isLoading: loading } = useQuery({
+    queryKey: ['blog-posts'],
+    queryFn: async () => {
+      const r = await fetch('/api/blog');
+      if (!r.ok) return [];
+      return r.json() as Promise<BlogPost[]>;
+    },
+  });
 
   return (
     <div className="min-h-screen bg-[#050505] text-white">

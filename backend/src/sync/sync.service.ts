@@ -220,7 +220,32 @@ export class SyncService {
    * Uses UPSERT for balances (one row per asset per account).
    */
   async syncAccount(account: any) {
+    const stillExists = await this.prisma.exchangeAccount.findUnique({
+      where: { id: account.id },
+      select: { id: true },
+    });
+    if (!stillExists) {
+      this.logger.warn(
+        `Skipping sync for ${account.name} (${account.exchange}): account was removed`,
+      );
+      return;
+    }
+
     const exchange = this.ccxt.createExchangeFromAccount(account);
+
+    const handleAccountRemovedDuringSync = async (err: unknown): Promise<boolean> => {
+      const code = (err as { code?: string })?.code;
+      if (code !== 'P2003') return false;
+      const exists = await this.prisma.exchangeAccount.findUnique({
+        where: { id: account.id },
+        select: { id: true },
+      });
+      if (exists) return false;
+      this.logger.warn(
+        `Account ${account.name} (${account.exchange}) was removed during sync, aborting`,
+      );
+      return true;
+    };
 
     const loadMarketsWithRetry = async (attempts = 3) => {
       for (let i = 0; i < attempts; i++) {
@@ -257,45 +282,50 @@ export class SyncService {
     // 2. Fetch and UPSERT balances (fix: no more duplicates)
     const balances = await this.ccxt.fetchBalance(exchange);
 
-    if (balances.length > 0) {
-      for (const balance of balances) {
-        const usdValue = this.ccxt.getUsdValueFromTickers(
-          tickerMap,
-          balance.asset,
-          balance.total,
-        );
+    try {
+      if (balances.length > 0) {
+        for (const balance of balances) {
+          const usdValue = this.ccxt.getUsdValueFromTickers(
+            tickerMap,
+            balance.asset,
+            balance.total,
+          );
 
-        const data = {
-          free: balance.free,
-          locked: balance.locked,
-          total: balance.total,
-          usdValue,
-        };
+          const data = {
+            free: balance.free,
+            locked: balance.locked,
+            total: balance.total,
+            usdValue,
+          };
 
-        await this.prisma.balance.upsert({
-          where: {
-            exchangeAccountId_asset: {
+          await this.prisma.balance.upsert({
+            where: {
+              exchangeAccountId_asset: {
+                exchangeAccountId: account.id,
+                asset: balance.asset,
+              },
+            },
+            update: data,
+            create: {
               exchangeAccountId: account.id,
               asset: balance.asset,
+              ...data,
             },
-          },
-          update: data,
-          create: {
+          });
+        }
+
+        // Remove balances for assets that no longer exist on the exchange
+        const currentAssets = balances.map((b) => b.asset);
+        await this.prisma.balance.deleteMany({
+          where: {
             exchangeAccountId: account.id,
-            asset: balance.asset,
-            ...data,
+            asset: { notIn: currentAssets },
           },
         });
       }
-
-      // Remove balances for assets that no longer exist on the exchange
-      const currentAssets = balances.map((b) => b.asset);
-      await this.prisma.balance.deleteMany({
-        where: {
-          exchangeAccountId: account.id,
-          asset: { notIn: currentAssets },
-        },
-      });
+    } catch (balanceErr) {
+      if (await handleAccountRemovedDuringSync(balanceErr)) return;
+      throw balanceErr;
     }
 
     this.logger.log(
@@ -368,36 +398,41 @@ export class SyncService {
     ) => {
       if (trades.length === 0) return;
       const CHUNK_SIZE = 50;
-      for (let i = 0; i < trades.length; i += CHUNK_SIZE) {
-        const chunk = trades.slice(i, i + CHUNK_SIZE);
-        await Promise.all(
-          chunk.map((trade) =>
-            this.prisma.trade.upsert({
-              where: {
-                exchangeAccountId_exchangeTradeId_marketType: {
+      try {
+        for (let i = 0; i < trades.length; i += CHUNK_SIZE) {
+          const chunk = trades.slice(i, i + CHUNK_SIZE);
+          await Promise.all(
+            chunk.map((trade) =>
+              this.prisma.trade.upsert({
+                where: {
+                  exchangeAccountId_exchangeTradeId_marketType: {
+                    exchangeAccountId: account.id,
+                    exchangeTradeId: trade.id,
+                    marketType: trade.marketType,
+                  },
+                },
+                update: {},
+                create: {
                   exchangeAccountId: account.id,
                   exchangeTradeId: trade.id,
                   marketType: trade.marketType,
+                  symbol: trade.symbol,
+                  side: trade.side,
+                  type: trade.type,
+                  price: trade.price,
+                  amount: trade.amount,
+                  cost: trade.cost,
+                  fee: trade.fee,
+                  feeCurrency: trade.feeCurrency,
+                  timestamp: trade.timestamp,
                 },
-              },
-              update: {},
-              create: {
-                exchangeAccountId: account.id,
-                exchangeTradeId: trade.id,
-                marketType: trade.marketType,
-                symbol: trade.symbol,
-                side: trade.side,
-                type: trade.type,
-                price: trade.price,
-                amount: trade.amount,
-                cost: trade.cost,
-                fee: trade.fee,
-                feeCurrency: trade.feeCurrency,
-                timestamp: trade.timestamp,
-              },
-            }),
-          ),
-        );
+              }),
+            ),
+          );
+        }
+      } catch (tradeErr) {
+        if (await handleAccountRemovedDuringSync(tradeErr)) return;
+        throw tradeErr;
       }
       const mt = trades[0]?.marketType || 'spot';
       this.logger.log(

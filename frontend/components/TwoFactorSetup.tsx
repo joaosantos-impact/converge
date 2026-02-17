@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -185,11 +186,12 @@ export function TwoFactorSetup({ isEnabled, onStatusChange }: TwoFactorSetupProp
           <div className="space-y-6 py-4">
             {totpUri && (
               <div className="flex justify-center p-4 bg-white">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(totpUri)}`}
                   alt="QR Code"
-                  className="w-44 h-44"
+                  width={176}
+                  height={176}
+                  unoptimized
                 />
               </div>
             )}
