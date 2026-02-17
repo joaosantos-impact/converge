@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Spinner } from '@/components/Spinner';
@@ -18,18 +18,14 @@ interface BlogPost {
 }
 
 export default function DashboardBlogPage() {
-  const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    fetch('/api/blog')
-      .then(r => {
-        if (!r.ok) throw new Error('Failed to fetch');
-        return r.json();
-      })
-      .then(data => { setPosts(data); setLoading(false); })
-      .catch(() => { setPosts([]); setLoading(false); });
-  }, []);
+  const { data: posts = [], isLoading: loading } = useQuery({
+    queryKey: ['blog-posts'],
+    queryFn: async () => {
+      const r = await fetch('/api/blog');
+      if (!r.ok) throw new Error('Failed to fetch');
+      return r.json() as Promise<BlogPost[]>;
+    },
+  });
 
   if (loading) {
     return (

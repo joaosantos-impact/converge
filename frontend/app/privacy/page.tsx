@@ -1,5 +1,11 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ConvergeLogo } from '@/components/ConvergeLogo';
+
+export const metadata: Metadata = {
+  title: 'Política de Privacidade',
+  description: 'Política de privacidade e proteção de dados da plataforma Converge.',
+};
 
 export default function PrivacyPage() {
   return (

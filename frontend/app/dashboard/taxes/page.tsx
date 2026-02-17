@@ -73,9 +73,10 @@ export default function TaxesPage() {
   const { data: session, isPending } = useSession();
   const { formatValue } = useCurrency();
   const router = useRouter();
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
+  const [selectedYear, setSelectedYearRaw] = useState(() => new Date().getFullYear().toString());
   const [exporting, setExporting] = useState(false);
   const [salesPage, setSalesPage] = useState(1);
+  const setSelectedYear = (v: string) => { setSelectedYearRaw(v); setSalesPage(1); };
 
   const SALES_PER_PAGE = 10;
 
@@ -91,9 +92,6 @@ export default function TaxesPage() {
     if (!session) { router.push('/sign-in'); return; }
   }, [session, isPending, router]);
 
-  useEffect(() => {
-    setSalesPage(1);
-  }, [selectedYear]);
 
   // Available years from trades data
   const availableYears = useMemo(() => {

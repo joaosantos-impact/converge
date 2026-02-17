@@ -19,10 +19,12 @@ interface D3GroupedBarChartProps {
 
 const DEFAULT_COLORS = ['rgba(255,255,255,0.6)', 'rgba(239,68,68,0.6)', '#3b82f6', '#10b981'];
 
+const EMPTY_COLORS: Record<string, string> = {};
+
 export function D3GroupedBarChart({
   data,
   seriesKeys,
-  seriesColors = {},
+  seriesColors = EMPTY_COLORS,
   height = 160,
   formatValue = (v) => v.toFixed(0),
   formatLabel = (x) => x,

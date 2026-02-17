@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   Select,
@@ -64,38 +65,24 @@ export default function ComparePage() {
   const [assetB, setAssetB] = useState('ETH');
   const [period, setPeriod] = useState<Period>('90d');
   const [compareMode, setCompareMode] = useState<CompareMode>('percent');
-  const [dataA, setDataA] = useState<PriceData[]>([]);
-  const [dataB, setDataB] = useState<PriceData[]>([]);
-  const [loading, setLoading] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    // Abort previous request to prevent race conditions
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    const fetchData = async () => {
-      setLoading(true);
-      const config = PERIODS[period];
-      try {
-        const [resA, resB] = await Promise.all([
-          fetch(`/api/prices/history?symbol=${assetA}&interval=${config.interval}&days=${config.days}`, { signal: controller.signal }),
-          fetch(`/api/prices/history?symbol=${assetB}&interval=${config.interval}&days=${config.days}`, { signal: controller.signal }),
-        ]);
-        if (resA.ok) setDataA(await resA.json());
-        if (resB.ok) setDataB(await resB.json());
-      } catch (e) {
-        if (e instanceof DOMException && e.name === 'AbortError') return;
-        toast.error('Erro ao carregar dados de comparação');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-    return () => controller.abort();
-  }, [assetA, assetB, period]);
+  const config = PERIODS[period];
+  const { data: priceData, isLoading: loading } = useQuery({
+    queryKey: ['compare-prices', assetA, assetB, period],
+    queryFn: async () => {
+      const [resA, resB] = await Promise.all([
+        fetch(`/api/prices/history?symbol=${assetA}&interval=${config.interval}&days=${config.days}`),
+        fetch(`/api/prices/history?symbol=${assetB}&interval=${config.interval}&days=${config.days}`),
+      ]);
+      return {
+        dataA: resA.ok ? (await resA.json()) as PriceData[] : [],
+        dataB: resB.ok ? (await resB.json()) as PriceData[] : [],
+      };
+    },
+    meta: { onError: () => toast.error('Erro ao carregar dados de comparação') },
+  });
+  const dataA = priceData?.dataA ?? [];
+  const dataB = priceData?.dataB ?? [];
 
   // Percent: change from start (%). Price-indexed: start = 100 so BTC and e.g. ADA are on same scale
   const normalizedA = useMemo(() => {
@@ -329,9 +316,9 @@ export default function ComparePage() {
                     <TooltipProvider delayDuration={200}>
                       <UITooltip>
                         <TooltipTrigger asChild>
-                          <span className="inline-flex text-muted-foreground hover:text-foreground cursor-help" aria-label="Explicação do índice 100" onClick={(e) => e.stopPropagation()}>
+                          <button type="button" className="inline-flex text-muted-foreground hover:text-foreground cursor-help" aria-label="Explicação do índice 100" onClick={(e) => e.stopPropagation()}>
                             <Info className="w-3.5 h-3.5" />
-                          </span>
+                          </button>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="max-w-[260px]">
                           O valor no primeiro dia do período é 100. Nos dias seguintes, 110 significa +10% desde o início e 90 significa -10%. Assim, BTC e um ativo muito mais barato (ex. ADA) aparecem na mesma escala.

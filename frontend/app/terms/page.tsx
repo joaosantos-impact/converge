@@ -1,5 +1,11 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ConvergeLogo } from '@/components/ConvergeLogo';
+
+export const metadata: Metadata = {
+  title: 'Termos de Serviço',
+  description: 'Termos e condições de utilização da plataforma Converge.',
+};
 
 export default function TermsPage() {
   return (

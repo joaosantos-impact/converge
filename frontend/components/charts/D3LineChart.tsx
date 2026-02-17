@@ -36,11 +36,14 @@ interface D3LineChartProps {
 
 const DEFAULT_SERIES_COLORS = ['#ca8a04', '#8b5cf6', '#f97316', '#10b981', '#3b82f6', '#ef4444'];
 
+const EMPTY_LABELS: Record<string, string> = {};
+const EMPTY_COLORS: Record<string, string> = {};
+
 export function D3LineChart({
   data,
   seriesKeys,
-  seriesLabels = {},
-  seriesColors = {},
+  seriesLabels = EMPTY_LABELS,
+  seriesColors = EMPTY_COLORS,
   height = 260,
   formatValue = (v) => v.toLocaleString(undefined, { maximumFractionDigits: 0 }),
   formatLabel = (x) => x,
