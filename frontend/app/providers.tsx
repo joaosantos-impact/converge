@@ -3,7 +3,7 @@
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { ThemeProvider } from 'next-themes';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { useState, createContext, useContext, useEffect, useCallback } from 'react';
+import { useState, createContext, useContext, useCallback } from 'react';
 
 // Currency context
 type Currency = 'USD' | 'EUR' | 'BTC';
@@ -82,8 +82,14 @@ async function fetchExchangeRates(): Promise<{ EUR: number; BTC: number }> {
   return newRates;
 }
 
+function getInitialCurrency(): Currency {
+  if (typeof window === 'undefined') return 'EUR';
+  const saved = localStorage.getItem('preferred-currency') as Currency | null;
+  return saved && ['USD', 'EUR', 'BTC'].includes(saved) ? saved : 'EUR';
+}
+
 function CurrencyProvider({ children }: { children: React.ReactNode }) {
-  const [currency, setCurrency] = useState<Currency>('EUR');
+  const [currency, setCurrency] = useState<Currency>(getInitialCurrency);
 
   const { data: rates = DEFAULT_RATES } = useQuery({
     queryKey: ['exchange-rates'],
@@ -93,12 +99,6 @@ function CurrencyProvider({ children }: { children: React.ReactNode }) {
     refetchInterval: RATES_REFRESH_MS,
     retry: 2,
   });
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const saved = localStorage.getItem('preferred-currency') as Currency;
-    if (saved && ['USD', 'EUR', 'BTC'].includes(saved)) setCurrency(saved);
-  }, []);
 
   const handleSetCurrency = useCallback((newCurrency: Currency) => {
     setCurrency(newCurrency);

@@ -59,6 +59,8 @@ interface PriceData {
   close: number;
 }
 
+const EMPTY_PRICE_DATA: PriceData[] = [];
+
 export default function ComparePage() {
   const { formatValue, formatChartValue } = useCurrency();
   const [assetA, setAssetA] = useState('BTC');
@@ -81,8 +83,8 @@ export default function ComparePage() {
     },
     meta: { onError: () => toast.error('Erro ao carregar dados de comparação') },
   });
-  const dataA = priceData?.dataA ?? [];
-  const dataB = priceData?.dataB ?? [];
+  const dataA = useMemo(() => priceData?.dataA ?? EMPTY_PRICE_DATA, [priceData?.dataA]);
+  const dataB = useMemo(() => priceData?.dataB ?? EMPTY_PRICE_DATA, [priceData?.dataB]);
 
   // Percent: change from start (%). Price-indexed: start = 100 so BTC and e.g. ADA are on same scale
   const normalizedA = useMemo(() => {
