@@ -29,16 +29,34 @@ export interface ExchangeAccountDetails {
   apiPassphrasePreview: string | null;
 }
 
+async function parseJsonSafe<T>(res: Response, fallback: T): Promise<T> {
+  const text = await res.text();
+  if (!text?.trim()) return fallback;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 async function fetchExchangeAccounts(): Promise<ExchangeAccount[]> {
-  const res = await fetch('/api/exchange-accounts');
-  if (!res.ok) throw new Error('Failed to fetch exchange accounts');
-  return res.json();
+  const res = await fetch('/api/exchange-accounts', { credentials: 'include' });
+  if (!res.ok) {
+    const body = await parseJsonSafe(res, {} as Record<string, unknown>);
+    const msg = (body?.message ?? body?.error) || res.statusText || `HTTP ${res.status}`;
+    throw new Error(typeof msg === 'string' ? msg : String(msg));
+  }
+  return parseJsonSafe(res, []);
 }
 
 async function fetchAccountDetails(id: string): Promise<ExchangeAccountDetails> {
-  const res = await fetch(`/api/exchange-accounts/details?id=${id}`);
-  if (!res.ok) throw new Error('Failed to fetch account details');
-  return res.json();
+  const res = await fetch(`/api/exchange-accounts/details?id=${id}`, { credentials: 'include' });
+  if (!res.ok) {
+    const body = await parseJsonSafe(res, {} as Record<string, unknown>);
+    const msg = (body?.message ?? body?.error) || res.statusText || `HTTP ${res.status}`;
+    throw new Error(typeof msg === 'string' ? msg : String(msg));
+  }
+  return parseJsonSafe(res, {} as ExchangeAccountDetails);
 }
 
 /**

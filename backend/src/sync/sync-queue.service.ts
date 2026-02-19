@@ -10,8 +10,10 @@ export interface AddJobResult {
   jobId?: string;
   useDirect?: boolean;
   success?: unknown;
+  status?: 'started';
   error?: string;
   statusCode?: number;
+  retryAfter?: number;
 }
 
 @Injectable()

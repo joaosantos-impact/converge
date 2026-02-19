@@ -60,7 +60,9 @@ export class SyncController {
       }
 
       if (result.useDirect && result.success) {
-        return result.success;
+        return result.status === 'started'
+          ? { success: true, status: 'started' }
+          : result.success;
       }
 
       return { jobId: result.jobId, status: 'queued' };

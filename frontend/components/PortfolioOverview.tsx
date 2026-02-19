@@ -2,12 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  RefreshCw,
   TrendingUp,
   TrendingDown,
   Wallet,
@@ -15,12 +13,10 @@ import {
 } from 'lucide-react';
 import type { PortfolioSummary } from '@/lib/types';
 import { AssetIcon } from '@/components/AssetIcon';
-import { toast } from 'sonner';
 
 export function PortfolioOverview() {
   const [portfolio, setPortfolio] = useState<PortfolioSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     fetchPortfolio();
@@ -40,25 +36,6 @@ export function PortfolioOverview() {
       console.error('Error fetching portfolio:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const response = await fetch('/api/sync', { method: 'POST' });
-      const data = await response.json();
-      
-      if (response.ok) {
-        toast.success(`Sincronizado com sucesso`);
-        await fetchPortfolio();
-      } else {
-        toast.error(data.message || 'Erro na sincronização');
-      }
-    } catch {
-      toast.error('Erro na sincronização com as exchanges');
-    } finally {
-      setSyncing(false);
     }
   };
 
@@ -112,12 +89,8 @@ export function PortfolioOverview() {
           <Wallet className="h-12 w-12 text-muted-foreground mb-4" />
           <h3 className="text-lg font-medium mb-2">No portfolio data</h3>
           <p className="text-muted-foreground text-sm text-center mb-6 max-w-sm">
-            Add an exchange account and sync to see your portfolio data here.
+            Adiciona uma conta de exchange para veres os teus dados aqui.
           </p>
-          <Button onClick={handleSync} disabled={syncing}>
-            {syncing && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
-            Sync Exchanges
-          </Button>
         </CardContent>
       </Card>
     );
@@ -126,17 +99,11 @@ export function PortfolioOverview() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Portfolio</h1>
-          <p className="text-sm text-muted-foreground">
-            Overview of your crypto holdings
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={handleSync} disabled={syncing}>
-          <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
-          Sync
-        </Button>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Portfolio</h1>
+        <p className="text-sm text-muted-foreground">
+          Visão geral das tuas posições
+        </p>
       </div>
 
       {/* Stats cards */}

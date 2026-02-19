@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useQueryClient } from '@tanstack/react-query';
 import { useSession } from '@/lib/auth-client';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAutoSync } from '@/hooks/use-auto-sync';
@@ -110,18 +111,6 @@ function IntegrationDetails({
   const { data: details, isLoading } = useExchangeAccountDetails(account.id);
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const invalidateAccounts = useInvalidateExchangeAccounts();
-  const { syncing, canSync, triggerSync } = useAutoSync();
-
-  const handleSync = async () => {
-    const { ok, error } = await triggerSync();
-    if (ok) {
-      toast.success('Sincronização concluída');
-      invalidateAccounts();
-    } else {
-      toast.error(error || 'Erro ao sincronizar');
-    }
-  };
 
   const handleDelete = async () => {
     setDeleting(true);
@@ -215,17 +204,6 @@ function IntegrationDetails({
       <div className="flex gap-3 pt-2">
         <Button variant="outline" onClick={onClose} className="flex-1">
           Fechar
-        </Button>
-        <Button
-          variant="outline"
-          onClick={handleSync}
-          disabled={syncing || !canSync}
-          className="flex-1"
-          title={!canSync ? 'Aguarda o cooldown antes de sincronizar' : undefined}
-        >
-          {syncing ? (
-            <div className="w-4 h-4 border-2 border-foreground/30 border-t-foreground animate-spin" />
-          ) : 'Sincronizar'}
         </Button>
         <Button
           variant="destructive"
@@ -414,6 +392,7 @@ function IntegrationsPageContent() {
 
   const { data: accountsData = [], error: accountsError } = useExchangeAccounts();
   const invalidateAccounts = useInvalidateExchangeAccounts();
+  const queryClient = useQueryClient();
 
   // Map of exchange id → connected accounts
   const accountsByExchange = useMemo(() => {
@@ -437,7 +416,7 @@ function IntegrationsPageContent() {
   }, [session, isPending, router]);
 
   useEffect(() => {
-    if (accountsError) toast.error('Erro ao carregar integrações');
+    if (accountsError) toast.error(accountsError.message || 'Erro ao carregar integrações');
   }, [accountsError]);
 
   const handleSelect = useCallback((integration: Integration) => {
@@ -469,7 +448,9 @@ function IntegrationsPageContent() {
   const handleDelete = useCallback(() => {
     handleClose();
     invalidateAccounts();
-  }, [handleClose, invalidateAccounts]);
+    queryClient.invalidateQueries({ queryKey: ['portfolio'] });
+    queryClient.invalidateQueries({ queryKey: ['trades'] });
+  }, [handleClose, invalidateAccounts, queryClient]);
 
   const filtered = EXCHANGE_INTEGRATIONS.filter((i) =>
     search ? i.name.toLowerCase().includes(search.toLowerCase()) : true

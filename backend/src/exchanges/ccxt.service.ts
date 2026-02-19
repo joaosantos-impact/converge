@@ -365,9 +365,9 @@ export class CcxtService {
 
     const symbolsToFetch = this.buildSymbolsForMarket(exchange, assets, marketType);
 
-    // Conservative throttling for all exchanges to avoid 429 (Binance, Kraken, etc.)
-    const BATCH_SIZE = 2;
-    const BATCH_DELAY_MS = 550;
+    // Throttling for exchanges (Binance, Kraken, etc.). Tuned for speed while avoiding 429.
+    const BATCH_SIZE = 4;
+    const BATCH_DELAY_MS = 400;
 
     for (let i = 0; i < symbolsToFetch.length; i += BATCH_SIZE) {
       if (i > 0) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { signIn } from "@/lib/auth-client";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -14,32 +15,29 @@ export function SignInForm() {
   const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [socialError, setSocialError] = useState<string | null>(null);
   const [socialLoading, setSocialLoading] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const signInMutation = useMutation({
+    mutationFn: async (credentials: { email: string; password: string }) => {
+      const result = await signIn.email(credentials);
+      if (result.error) throw new Error(result.error.message ?? "Falha ao entrar");
+      return result;
+    },
+    onSuccess: () => {
+      router.push(callbackUrl);
+      router.refresh();
+    },
+  });
+
+  const error = signInMutation.error?.message ?? socialError;
+  const isLoading = signInMutation.isPending;
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setIsLoading(true);
-
-    try {
-      const result = await signIn.email({
-        email,
-        password,
-      });
-
-      if (result.error) {
-        setError(result.error.message || "Failed to sign in");
-      } else {
-        router.push("/dashboard");
-        router.refresh();
-      }
-    } catch {
-      setError("An unexpected error occurred");
-    } finally {
-      setIsLoading(false);
-    }
+    setSocialError(null);
+    signInMutation.reset();
+    signInMutation.mutate({ email, password });
   };
 
   return (
@@ -47,7 +45,7 @@ export function SignInForm() {
       <SocialSignInButtons
         callbackUrl={callbackUrl}
         disabled={isLoading}
-        onError={setError}
+        onError={setSocialError}
         socialLoading={socialLoading}
         onSocialLoadingChange={setSocialLoading}
       />

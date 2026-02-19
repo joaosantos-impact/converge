@@ -60,30 +60,49 @@ export function useAutoSync(options?: { pollFast?: boolean }) {
 
       const syncDate = data.lastSync?.startedAt ? new Date(data.lastSync.startedAt) : null;
       const rawRunning = data.lastSync?.status === 'running';
-      // Ignore stale "running" (backend should fix, but safeguard against orphaned logs)
       const startedAt = data.lastSync?.startedAt ? new Date(data.lastSync.startedAt).getTime() : 0;
       const isRunning = rawRunning && Date.now() - startedAt < STALE_RUNNING_MS;
-      setState(prev => ({
-        ...prev,
-        lastSyncAt: syncDate ?? prev.lastSyncAt,
-        syncing: isRunning ?? prev.syncing,
-        canSync: typeof data.canSync === 'boolean' ? data.canSync : prev.canSync,
-      }));
+      setState((prev) => {
+        const wasSyncing = prev.syncing;
+        const next = {
+          ...prev,
+          lastSyncAt: syncDate ?? prev.lastSyncAt,
+          syncing: isRunning ?? prev.syncing,
+          canSync: typeof data.canSync === 'boolean' ? data.canSync : prev.canSync,
+        };
+        // When sync finished (was syncing, now not), refresh data if completed and allow another trigger
+        if (wasSyncing && !isRunning) {
+          if (data.lastSync?.status === 'completed') {
+            queryClient.invalidateQueries({ queryKey: ['portfolio'] });
+            queryClient.invalidateQueries({ queryKey: ['trades'] });
+            queryClient.invalidateQueries({ queryKey: ['exchange-accounts'] });
+          }
+          syncingRef.current = false;
+        }
+        return next;
+      });
     } catch {
       // Silently fail — status check is non-critical
     }
-  }, []);
+  }, [queryClient]);
 
-  // Manual trigger — call from Sync buttons; blocks until sync completes
-  const triggerSync = useCallback(async (): Promise<{ ok: boolean; error?: string }> => {
+  // Manual trigger — with Redis returns immediately (queued); without Redis returns "started" and sync runs in background
+  const triggerSync = useCallback(async (): Promise<{ ok: boolean; started?: boolean; error?: string }> => {
     if (syncingRef.current) return { ok: false, error: 'Sync já em curso' };
     syncingRef.current = true;
     setState((prev) => ({ ...prev, syncing: true, error: null }));
+    let body: { status?: string; error?: string; message?: string } = {};
     try {
       const res = await fetch('/api/sync', { method: 'POST' });
-      const body = await res.json().catch(() => ({}));
+      body = await res.json().catch(() => ({}));
       if (!mountedRef.current) return { ok: false };
       if (res.ok) {
+        const started = body?.status === 'started' || body?.status === 'queued';
+        if (started) {
+          // Sync runs in background; keep syncing true, polling will detect completion and invalidate
+          setTimeout(checkStatus, 2000);
+          return { ok: true, started: true };
+        }
         setState((prev) => ({ ...prev, syncing: false, lastSyncAt: new Date(), canSync: false }));
         queryClient.invalidateQueries({ queryKey: ['portfolio'] });
         queryClient.invalidateQueries({ queryKey: ['trades'] });
@@ -105,7 +124,9 @@ export function useAutoSync(options?: { pollFast?: boolean }) {
       }
       return { ok: false, error: errMsg };
     } finally {
-      syncingRef.current = false;
+      // When sync runs in background (started/queued), keep syncingRef true until polling sees completion
+      const isBackground = body?.status === 'started' || body?.status === 'queued';
+      if (!isBackground) syncingRef.current = false;
     }
   }, [queryClient, checkStatus]);
 
@@ -115,6 +136,8 @@ export function useAutoSync(options?: { pollFast?: boolean }) {
 
     // Check status immediately (important when just added integration so we show "syncing" soon)
     checkStatus();
+    // After adding an integration, backend starts sync in background; extra check at 1.5s to catch "running" quickly
+    const fastCheck = pollFastUntilRef.current > Date.now() ? setTimeout(checkStatus, 1500) : null;
 
     // When tab becomes visible, refresh status (no auto-sync)
     const handleVisibility = () => {
@@ -132,6 +155,7 @@ export function useAutoSync(options?: { pollFast?: boolean }) {
         slowInterval = setInterval(checkStatus, CHECK_INTERVAL_MS);
       }, POLL_FAST_DURATION_MS);
       return () => {
+        if (fastCheck) clearTimeout(fastCheck);
         clearTimeout(switchTimer);
         clearInterval(interval);
         if (slowInterval) clearInterval(slowInterval);
@@ -141,6 +165,7 @@ export function useAutoSync(options?: { pollFast?: boolean }) {
     }
 
     return () => {
+      if (fastCheck) clearTimeout(fastCheck);
       mountedRef.current = false;
       clearInterval(interval);
       if (slowInterval) clearInterval(slowInterval);

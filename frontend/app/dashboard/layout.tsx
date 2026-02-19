@@ -12,9 +12,9 @@ import { useExchangeAccounts } from "@/hooks/use-exchange-accounts";
 
 function SyncIndicator() {
   const { syncing } = useAutoSync();
-  const { data: accounts = [] } = useExchangeAccounts();
+  useExchangeAccounts(); // keep query warm for exchanges/integrations
 
-  if (!syncing || accounts.length === 0) return null;
+  if (!syncing) return null;
 
   return (
     <div className="flex items-center gap-1.5" title="A sincronizar...">

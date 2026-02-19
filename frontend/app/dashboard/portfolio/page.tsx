@@ -69,7 +69,7 @@ export default function PortfolioPage() {
   const { formatValue, formatPrice } = useCurrency();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { syncing, canSync, triggerSync } = useAutoSync();
+  const { syncing } = useAutoSync();
   const {
     data: accounts,
     isLoading: accountsLoading,
@@ -191,16 +191,6 @@ export default function PortfolioPage() {
     }
   };
 
-  const handleSync = async () => {
-    const { ok, error } = await triggerSync();
-    if (ok) {
-      toast.success('Sincronizado');
-      queryClient.invalidateQueries({ queryKey: ['portfolio'] });
-    } else {
-      toast.error(error || 'Erro ao sincronizar');
-    }
-  };
-
   const handleOnboardingComplete = async () => {
     await fetch('/api/user/onboarding-completed', { method: 'PATCH' });
     setOnboardingJustCompleted(true);
@@ -246,9 +236,6 @@ export default function PortfolioPage() {
             <div className="flex items-center gap-2">
               <Button onClick={handleShare} variant="outline" size="sm" disabled aria-label="Partilhar portfolio">
                 Partilhar
-              </Button>
-              <Button onClick={handleSync} disabled={syncing || !canSync} size="sm" aria-label="Sincronizar dados">
-                {showSyncing ? <div className="w-3.5 h-3.5 border-2 border-background/30 border-t-background animate-spin" /> : 'Sincronizar'}
               </Button>
             </div>
           </div>
@@ -313,9 +300,6 @@ export default function PortfolioPage() {
             </div>
             <Button onClick={handleShare} variant="outline" size="sm" disabled={sharing} aria-label="Partilhar portfolio">
               {sharing ? <div className="w-3.5 h-3.5 border-2 border-muted-foreground/30 border-t-muted-foreground animate-spin" /> : 'Partilhar'}
-            </Button>
-            <Button onClick={handleSync} disabled={syncing || !canSync} size="sm" aria-label="Sincronizar dados" title={!canSync ? 'Aguarda o cooldown antes de sincronizar' : undefined}>
-              {showSyncing ? <div className="w-3.5 h-3.5 border-2 border-background/30 border-t-background animate-spin" /> : 'Sincronizar'}
             </Button>
           </div>
         </div>
