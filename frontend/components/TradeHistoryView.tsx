@@ -66,7 +66,7 @@ export function TradeHistoryView({ marketType, title, emptyMessage = 'Sem opera√
   const { formatValue, formatPrice } = useCurrency();
   const { syncing } = useAutoSync();
   const { data: accounts = [] } = useExchangeAccounts();
-  const showSyncing = syncing && accounts.length > 0;
+  const showSyncing = syncing;
   const [filterAsset, setFilterAssetRaw] = useState<string>(() => searchParams.get('asset') || 'all');
   const [filterType, setFilterTypeRaw] = useState<'all' | 'buy' | 'sell'>('all');
   const [filterExchange, setFilterExchangeRaw] = useState<string>('all');
@@ -262,6 +262,13 @@ export function TradeHistoryView({ marketType, title, emptyMessage = 'Sem opera√
           </Select>
         </div>
       </FadeIn>
+
+      {showSyncing && trades.length > 0 && (
+        <div className="flex items-center gap-2 px-3 py-2 border border-border bg-muted/50 text-xs text-muted-foreground">
+          <div className="w-3.5 h-3.5 border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin shrink-0" />
+          <span>Sincronizando dados‚Ä¶ Os resultados podem atualizar em breve.</span>
+        </div>
+      )}
 
       <FadeIn delay={0.05}>
         <div className="grid gap-4 lg:grid-cols-[1fr_220px] lg:items-start">

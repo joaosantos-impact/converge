@@ -11,6 +11,14 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useSession } from '@/lib/auth-client';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useCurrency } from '@/app/providers';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { useFeed, useInvalidateFeed } from '@/hooks/use-feed';
 import { useTrades } from '@/hooks/use-trades';
 import {
@@ -29,6 +37,11 @@ export default function FeedPage() {
   const router = useRouter();
   const isMobile = useIsMobile();
   const [filter, setFilter] = useState<'all' | 'buys' | 'sells'>('all');
+  const [authorFilter, setAuthorFilter] = useState<'all' | 'mine'>('all');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'likes'>('newest');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedTrades, setSelectedTrades] = useState<string[]>([]);
   const [content, setContent] = useState('');
@@ -55,7 +68,7 @@ export default function FeedPage() {
   }, [session, isPending, router]);
 
   useEffect(() => {
-    if (feedError) toast.error('Erro ao carregar feed');
+    if (feedError) toast.error(feedError.message || 'Erro ao carregar feed');
   }, [feedError]);
 
   const handleOpenDialog = () => {
@@ -124,13 +137,31 @@ export default function FeedPage() {
   };
 
   const allFilteredPosts = useMemo(() => {
-    return posts.filter((post: { trades?: Array<{ side: string }> }) => {
+    let list = posts.filter((post: { trades?: Array<{ side: string }> }) => {
       if (filter === 'all') return true;
       if (filter === 'buys') return post.trades?.some(t => t.side === 'buy') ?? false;
       if (filter === 'sells') return post.trades?.some(t => t.side === 'sell') ?? false;
       return true;
     });
-  }, [posts, filter]);
+    if (authorFilter === 'mine') list = list.filter((p: { isOwner?: boolean }) => p.isOwner === true);
+    if (dateFrom) {
+      const from = new Date(dateFrom).getTime();
+      list = list.filter((p: { createdAt: string }) => new Date(p.createdAt).getTime() >= from);
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      list = list.filter((p: { createdAt: string }) => new Date(p.createdAt).getTime() <= to.getTime());
+    }
+    const q = searchQuery.trim().toLowerCase();
+    if (q) list = list.filter((p: { content?: string }) => (p.content ?? '').toLowerCase().includes(q));
+    list = [...list].sort((a: { createdAt: string; likes?: number }, b: { createdAt: string; likes?: number }) => {
+      if (sortBy === 'newest') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      if (sortBy === 'oldest') return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      return (b.likes ?? 0) - (a.likes ?? 0);
+    });
+    return list;
+  }, [posts, filter, authorFilter, dateFrom, dateTo, searchQuery, sortBy]);
 
   const filteredPosts = useMemo(() => allFilteredPosts.slice(0, visiblePostCount), [allFilteredPosts, visiblePostCount]);
   const hasMorePosts = allFilteredPosts.length > visiblePostCount;
@@ -242,7 +273,7 @@ export default function FeedPage() {
 
   if (isPending || loading) {
     return (
-      <div className="space-y-6 max-w-2xl mx-auto">
+      <div className="space-y-6 w-full">
         <Skeleton className="h-8 w-32" />
         <Skeleton className="h-[400px] flex items-center justify-center">
           <div className="w-5 h-5 border-2 border-muted-foreground/20 border-t-muted-foreground animate-spin" />
@@ -252,7 +283,7 @@ export default function FeedPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
+    <div className="space-y-6 w-full">
       <FadeIn>
         <div className="flex items-center justify-between">
           <div>
@@ -266,17 +297,53 @@ export default function FeedPage() {
         </div>
       </FadeIn>
 
-      {/* Filters */}
-      <div className="flex gap-1 p-1 bg-muted w-fit" role="group" aria-label="Filtrar posts">
-        {(['all', 'buys', 'sells'] as const).map(f => (
-          <button key={f} onClick={() => setFilter(f)}
-            aria-pressed={filter === f}
-            className={`px-4 py-1.5 text-sm font-medium transition-colors ${filter === f ? 'bg-background text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
-          >
-            {f === 'all' ? 'Todas' : f === 'buys' ? 'Compras' : 'Vendas'}
-          </button>
-        ))}
-      </div>
+      {/* Filters — mesma linha que Futuros/Spot */}
+      <FadeIn delay={0.03}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={filter} onValueChange={(v: 'all' | 'buys' | 'sells') => setFilter(v)}>
+            <SelectTrigger className="min-w-[130px] h-9">
+              <SelectValue placeholder="Tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              <SelectItem value="buys">Compras</SelectItem>
+              <SelectItem value="sells">Vendas</SelectItem>
+            </SelectContent>
+          </Select>
+          {posts.length > 0 && (
+            <>
+              <Select value={authorFilter} onValueChange={(v: 'all' | 'mine') => setAuthorFilter(v)}>
+                <SelectTrigger className="min-w-[130px] h-9">
+                  <SelectValue placeholder="Autor" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os autores</SelectItem>
+                  <SelectItem value="mine">Só os meus</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sortBy} onValueChange={(v: 'newest' | 'oldest' | 'likes') => setSortBy(v)}>
+                <SelectTrigger className="min-w-[140px] h-9">
+                  <SelectValue placeholder="Ordenar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">Mais recentes</SelectItem>
+                  <SelectItem value="oldest">Mais antigos</SelectItem>
+                  <SelectItem value="likes">Mais likes</SelectItem>
+                </SelectContent>
+              </Select>
+              <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-9 w-[7.25rem] shrink-0 text-xs [&::-webkit-date-and-time-value]:text-xs" />
+              <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-9 w-[7.25rem] shrink-0 text-xs [&::-webkit-date-and-time-value]:text-xs" />
+              <Input type="search" placeholder="Procurar..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="h-9 min-w-[140px] max-w-[180px]" />
+              {(authorFilter !== 'all' || sortBy !== 'newest' || dateFrom || dateTo || searchQuery.trim()) && (
+                <Button variant="outline" size="sm" className="h-9 text-xs" onClick={() => { setAuthorFilter('all'); setSortBy('newest'); setDateFrom(''); setDateTo(''); setSearchQuery(''); }}>
+                  Limpar
+                </Button>
+              )}
+            </>
+          )}
+          <span className="text-xs text-muted-foreground ml-1">{allFilteredPosts.length} post{allFilteredPosts.length !== 1 ? 's' : ''}</span>
+        </div>
+      </FadeIn>
 
       {/* Posts */}
       {filteredPosts.length === 0 ? (
@@ -285,9 +352,19 @@ export default function FeedPage() {
             <div className="w-12 h-12 mx-auto mb-4 bg-muted flex items-center justify-center">
               <svg className="w-6 h-6 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
             </div>
-            <p className="text-sm font-medium mb-1">Sem posts no feed</p>
-            <p className="text-xs text-muted-foreground max-w-xs mx-auto">Sê o primeiro a publicar! Seleciona trades verificadas da tua conta e partilha com a comunidade.</p>
-            <Button size="sm" className="mt-4" onClick={handleOpenDialog}>Criar primeiro post</Button>
+            {posts.length === 0 ? (
+              <>
+                <p className="text-sm font-medium mb-1">Sem posts no feed</p>
+                <p className="text-xs text-muted-foreground max-w-xs mx-auto">Sê o primeiro a publicar! Seleciona trades verificadas da tua conta e partilha com a comunidade.</p>
+                <Button size="sm" className="mt-4" onClick={handleOpenDialog}>Criar primeiro post</Button>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium mb-1">Nenhum post corresponde aos filtros</p>
+                <p className="text-xs text-muted-foreground max-w-xs mx-auto mb-4">Ajusta os filtros acima para ver mais resultados.</p>
+                <Button variant="outline" size="sm" onClick={() => { setFilter('all'); setAuthorFilter('all'); setSortBy('newest'); setDateFrom(''); setDateTo(''); setSearchQuery(''); }}>Limpar filtros</Button>
+              </>
+            )}
           </div>
         </div>
       ) : (

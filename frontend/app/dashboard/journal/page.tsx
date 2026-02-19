@@ -13,6 +13,14 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { useSession } from '@/lib/auth-client';
 import { useCurrency } from '@/app/providers';
 import { useTrades } from '@/hooks/use-trades';
@@ -52,6 +60,25 @@ export default function JournalPage() {
   // Delete confirmation
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
+  // Filters for entries list
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [typeFilter, setTypeFilter] = useState<'all' | 'with_note' | 'with_trades'>('all');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Filters for trade selector (when writing entry)
+  const [tradeFilterSymbol, setTradeFilterSymbol] = useState('');
+  const [tradeFilterSide, setTradeFilterSide] = useState<'all' | 'buy' | 'sell'>('all');
+
+  // View: calendar (default) or list
+  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const d = new Date();
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  });
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
   const todayLabel = new Date().toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' });
 
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -66,7 +93,7 @@ export default function JournalPage() {
   /* eslint-enable react-hooks/set-state-in-effect */
 
   useEffect(() => {
-    if (tradesError) toast.error('Erro ao carregar trades');
+    if (tradesError) toast.error(tradesError.message || 'Erro ao carregar trades');
   }, [tradesError]);
 
   const saveEntries = (updated: JournalEntry[]) => {
@@ -100,6 +127,96 @@ export default function JournalPage() {
     cutoff.setDate(cutoff.getDate() - 30);
     return trades.filter(t => new Date(t.timestamp) >= cutoff);
   }, [trades]);
+
+  // Filter entries by date, type, search and sort
+  const filteredEntries = useMemo(() => {
+    let list = [...entries];
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      list = list.filter(e => new Date(e.date) >= from);
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      list = list.filter(e => new Date(e.date) <= to);
+    }
+    if (typeFilter === 'with_note') list = list.filter(e => (e.note?.trim() ?? '').length > 0);
+    if (typeFilter === 'with_trades') list = list.filter(e => (e.trades?.length ?? 0) > 0);
+    const q = searchQuery.trim().toLowerCase();
+    if (q) list = list.filter(e => (e.note ?? '').toLowerCase().includes(q));
+    list.sort((a, b) => {
+      const da = new Date(a.date).getTime();
+      const db = new Date(b.date).getTime();
+      return sortOrder === 'newest' ? db - da : da - db;
+    });
+    return list;
+  }, [entries, dateFrom, dateTo, typeFilter, sortOrder, searchQuery]);
+
+  // Filter trades in selector by symbol and side
+  const filteredRecentTrades = useMemo(() => {
+    let list = recentTrades;
+    const sym = tradeFilterSymbol.trim().toUpperCase();
+    if (sym) list = list.filter(t => (t.symbol ?? '').toUpperCase().includes(sym));
+    if (tradeFilterSide !== 'all') list = list.filter(t => t.side === tradeFilterSide);
+    return list;
+  }, [recentTrades, tradeFilterSymbol, tradeFilterSide]);
+
+  // Entries grouped by date (for calendar)
+  const entriesByDate = useMemo(() => {
+    const map = new Map<string, JournalEntry[]>();
+    for (const e of entries) {
+      if (!map.has(e.date)) map.set(e.date, []);
+      map.get(e.date)!.push(e);
+    }
+    return map;
+  }, [entries]);
+
+  // Calendar grid: weeks, each week = 7 days. Monday = first column.
+  const calendarWeeks = useMemo(() => {
+    const y = calendarMonth.getFullYear();
+    const m = calendarMonth.getMonth();
+    const first = new Date(y, m, 1);
+    const last = new Date(y, m + 1, 0);
+    const daysInMonth = last.getDate();
+    // Monday = 0: getDay() 0=Sun->6, 1=Mon->0, ...
+    const firstWeekday = (first.getDay() + 6) % 7;
+    const leading = firstWeekday;
+    const total = leading + daysInMonth;
+    const trailing = total % 7 === 0 ? 0 : 7 - (total % 7);
+    const prevMonthLast = new Date(y, m, 0).getDate();
+    const days: Array<{ dateStr: string; day: number; isCurrentMonth: boolean; entries: JournalEntry[] }> = [];
+    for (let i = 0; i < leading; i++) {
+      const d = Math.max(1, prevMonthLast - leading + 1 + i);
+      const date = new Date(y, m - 1, d);
+      const dateStrNorm = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+      days.push({ dateStr: dateStrNorm, day: date.getDate(), isCurrentMonth: false, entries: entriesByDate.get(dateStrNorm) ?? [] });
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      days.push({ dateStr, day: d, isCurrentMonth: true, entries: entriesByDate.get(dateStr) ?? [] });
+    }
+    const nextMonthDays = trailing;
+    for (let d = 1; d <= nextMonthDays; d++) {
+      const date = new Date(y, m + 1, d);
+      const dateStrNorm = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+      days.push({ dateStr: dateStrNorm, day: d, isCurrentMonth: false, entries: entriesByDate.get(dateStrNorm) ?? [] });
+    }
+    const weeks: typeof days[] = [];
+    for (let i = 0; i < days.length; i += 7) weeks.push(days.slice(i, i + 7));
+    return weeks;
+  }, [calendarMonth, entriesByDate]);
+
+  // For calendar: which days have (filtered) entries
+  const filteredEntriesByDate = useMemo(() => {
+    const map = new Map<string, JournalEntry[]>();
+    for (const e of filteredEntries) {
+      if (!map.has(e.date)) map.set(e.date, []);
+      map.get(e.date)!.push(e);
+    }
+    return map;
+  }, [filteredEntries]);
+
+  const selectedDateEntries = selectedDate ? (filteredEntriesByDate.get(selectedDate) ?? []) : [];
 
   const selectedPnl = useMemo(() => {
     return recentTrades
@@ -151,7 +268,7 @@ export default function JournalPage() {
 
   if (isPending || loading) {
     return (
-      <div className="space-y-6 max-w-2xl mx-auto">
+      <div className="space-y-6 w-full">
         <Skeleton className="h-8 w-48" />
         <div className="flex items-center justify-center py-20">
           <Spinner size="lg" />
@@ -161,21 +278,93 @@ export default function JournalPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
+    <div className="space-y-6 w-full">
       <FadeIn>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-xl font-medium tracking-tight">Journal</h1>
             <p className="text-sm text-muted-foreground">Regista notas sobre o teu dia de trading</p>
           </div>
-          {!isWriting && (
-            <Button size="sm" onClick={() => setIsWriting(true)}>
-              <svg className="w-4 h-4 mr-1.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
-              Escrever
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            <div className="flex gap-0.5 p-0.5 bg-muted rounded-md" role="group" aria-label="Vista">
+              <button
+                type="button"
+                onClick={() => setViewMode('calendar')}
+                aria-pressed={viewMode === 'calendar'}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors rounded ${viewMode === 'calendar' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                Calendário
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                aria-pressed={viewMode === 'list'}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors rounded ${viewMode === 'list' ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                Lista
+              </button>
+            </div>
+            {!isWriting && (
+              <Button size="sm" onClick={() => setIsWriting(true)}>
+                <svg className="w-4 h-4 mr-1.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                Escrever
+              </Button>
+            )}
+          </div>
         </div>
       </FadeIn>
+
+      {/* Filters — mesma linha que Futuros/Spot */}
+      {entries.length > 0 && (
+        <FadeIn delay={0.03}>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="h-9 w-[7.25rem] shrink-0 text-xs [&::-webkit-date-and-time-value]:text-xs"
+            />
+            <Input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="h-9 w-[7.25rem] shrink-0 text-xs [&::-webkit-date-and-time-value]:text-xs"
+            />
+            <Select value={typeFilter} onValueChange={(v: 'all' | 'with_note' | 'with_trades') => setTypeFilter(v)}>
+              <SelectTrigger className="min-w-[140px] h-9">
+                <SelectValue placeholder="Tipo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="with_note">Só com nota</SelectItem>
+                <SelectItem value="with_trades">Só com trades</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sortOrder} onValueChange={(v: 'newest' | 'oldest') => setSortOrder(v)}>
+              <SelectTrigger className="min-w-[140px] h-9">
+                <SelectValue placeholder="Ordenar" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="newest">Mais recentes</SelectItem>
+                <SelectItem value="oldest">Mais antigas</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              type="search"
+              placeholder="Procurar..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-9 min-w-[140px] max-w-[180px]"
+            />
+            {(dateFrom || dateTo || typeFilter !== 'all' || sortOrder !== 'newest' || searchQuery.trim()) && (
+              <Button variant="outline" size="sm" className="h-9 text-xs" onClick={() => { setDateFrom(''); setDateTo(''); setTypeFilter('all'); setSortOrder('newest'); setSearchQuery(''); }}>
+                Limpar
+              </Button>
+            )}
+            <span className="text-xs text-muted-foreground ml-1">{filteredEntries.length} entrada{filteredEntries.length !== 1 ? 's' : ''}</span>
+          </div>
+        </FadeIn>
+      )}
 
       {/* Today's summary */}
       <FadeIn delay={0.05}>
@@ -233,6 +422,28 @@ export default function JournalPage() {
                   <span className="text-[10px] text-muted-foreground">{selectedTradeIds.length} selecionada{selectedTradeIds.length > 1 ? 's' : ''}</span>
                 )}
               </div>
+              {/* Filters for trade list */}
+              {recentTrades.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2">
+                  <Input
+                    type="text"
+                    placeholder="Filtrar por par (ex: BTC)"
+                    value={tradeFilterSymbol}
+                    onChange={(e) => setTradeFilterSymbol(e.target.value)}
+                    className="h-8 text-xs max-w-[140px]"
+                  />
+                  <Select value={tradeFilterSide} onValueChange={(v: 'all' | 'buy' | 'sell') => setTradeFilterSide(v)}>
+                    <SelectTrigger className="h-8 w-[110px] text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="buy">Compras</SelectItem>
+                      <SelectItem value="sell">Vendas</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               {recentTrades.length === 0 ? (
                 <div className="p-6 border border-border bg-muted/30 text-center">
                   <p className="text-xs text-muted-foreground">Sem trades recentes</p>
@@ -240,7 +451,7 @@ export default function JournalPage() {
                 </div>
               ) : (
                 <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
-                  {recentTrades.slice(0, 30).map((trade) => {
+                  {filteredRecentTrades.slice(0, 50).map((trade) => {
                     const tradeId = trade.id || `${trade.symbol}-${trade.timestamp}`;
                     const isSelected = selectedTradeIds.includes(tradeId);
                     return (
@@ -291,8 +502,148 @@ export default function JournalPage() {
         </FadeIn>
       )}
 
-      {/* Journal entries */}
-      {entries.length === 0 && !isWriting ? (
+      {/* Calendar view (default) */}
+      {viewMode === 'calendar' && (
+        <FadeIn delay={0.03}>
+          <div className="border border-border bg-card overflow-hidden shadow-sm ring-1 ring-border/50">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))}
+                  className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                  aria-label="Mês anterior"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M15 18l-6-6 6-6"/></svg>
+                </button>
+                <span className="text-sm font-medium min-w-[140px] text-center capitalize">
+                  {calendarMonth.toLocaleDateString('pt-PT', { month: 'long', year: 'numeric' })}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1))}
+                  className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                  aria-label="Mês seguinte"
+                >
+                  <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
+                </button>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const t = new Date();
+                  setCalendarMonth(new Date(t.getFullYear(), t.getMonth(), 1));
+                  setSelectedDate(t.toISOString().slice(0, 10));
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Hoje
+              </button>
+            </div>
+            <div className="p-3">
+              <div className="grid grid-cols-7 gap-px text-center text-[10px] text-muted-foreground font-medium mb-1">
+                {['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'].map(day => (
+                  <div key={day}>{day}</div>
+                ))}
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {calendarWeeks.flat().map((cell, cellIndex) => {
+                  const isToday = cell.dateStr === today;
+                  const isSelected = cell.dateStr === selectedDate;
+                  const hasEntries = (filteredEntriesByDate.get(cell.dateStr) ?? []).length > 0;
+                  return (
+                    <button
+                      key={`cal-${calendarMonth.getTime()}-${cellIndex}`}
+                      type="button"
+                      onClick={() => setSelectedDate(cell.dateStr)}
+                      className={`min-h-[44px] sm:min-h-[52px] rounded-md flex flex-col items-center justify-center transition-colors ${
+                        !cell.isCurrentMonth ? 'text-muted-foreground/50' : 'text-foreground'
+                      } ${isSelected ? 'bg-foreground text-background' : 'hover:bg-muted'} ${isToday && !isSelected ? 'ring-1 ring-foreground/30' : ''}`}
+                    >
+                      <span className={`text-sm font-medium tabular-nums ${isSelected ? '!text-background' : ''}`}>{cell.day}</span>
+                      {hasEntries && (
+                        <span className={`w-1.5 h-1.5 rounded-full mt-0.5 ${isSelected ? 'bg-background' : 'bg-foreground/60'}`} />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          {/* Selected day detail */}
+          {selectedDate && (
+            <div className="mt-3 border border-border bg-card p-4">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-sm font-medium capitalize">
+                  {new Date(selectedDate + 'T12:00:00').toLocaleDateString('pt-PT', { weekday: 'long', day: 'numeric', month: 'long' })}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate(null)}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Fechar
+                </button>
+              </div>
+              {selectedDateEntries.length === 0 ? (
+                <div className="py-6 text-center">
+                  <p className="text-xs text-muted-foreground mb-2">Sem entradas neste dia</p>
+                  {selectedDate === today && (
+                    <Button size="sm" variant="outline" onClick={() => setIsWriting(true)}>Escrever entrada</Button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {selectedDateEntries.map((entry) => {
+                    const dayTrades = entry.trades?.length > 0 ? entry.trades : (tradesByDay.get(entry.date) || []);
+                    return (
+                      <div key={entry.id} className="border border-border rounded-lg overflow-hidden">
+                        {entry.note && (
+                          <div className="px-4 py-3">
+                            <p className="text-sm leading-relaxed whitespace-pre-wrap">{entry.note}</p>
+                          </div>
+                        )}
+                        {dayTrades.length > 0 && (
+                          <div className="px-4 pb-3 space-y-1">
+                            {dayTrades.slice(0, 5).map((trade, i) => (
+                              <div key={trade.id || i} className="flex items-center gap-2 py-1.5 text-xs">
+                                <div className="w-1 h-4 shrink-0 bg-foreground" />
+                                <span className="font-medium">{trade.symbol}</span>
+                                <span className="text-muted-foreground">{trade.side === 'buy' ? 'C' : 'V'}</span>
+                                <span className="ml-auto text-muted-foreground">{formatValue(trade.cost)}</span>
+                                {trade.pnl != null && (
+                                  <span className={trade.pnl >= 0 ? 'text-foreground' : 'text-red-500'}>
+                                    {trade.pnl >= 0 ? '+' : ''}{formatValue(trade.pnl)}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                            {dayTrades.length > 5 && (
+                              <p className="text-[10px] text-muted-foreground">+{dayTrades.length - 5} trades</p>
+                            )}
+                          </div>
+                        )}
+                        <div className="px-4 py-2 border-t border-border flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget(entry.id)}
+                            className="text-[10px] text-muted-foreground hover:text-destructive"
+                          >
+                            Remover
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </FadeIn>
+      )}
+
+      {/* Journal entries (list view only) */}
+      {viewMode === 'list' && entries.length === 0 && !isWriting ? (
         <FadeIn delay={0.1}>
           <div className="border border-border bg-card">
             <div className="p-12 text-center">
@@ -307,9 +658,19 @@ export default function JournalPage() {
             </div>
           </div>
         </FadeIn>
-      ) : (
+      ) : viewMode === 'list' && filteredEntries.length === 0 ? (
+        <FadeIn delay={0.1}>
+          <div className="border border-border bg-card p-12 text-center">
+            <p className="text-sm font-medium mb-1">Nenhuma entrada corresponde aos filtros</p>
+            <p className="text-xs text-muted-foreground mb-4">Ajusta os filtros ou limpa para ver todas.</p>
+            <Button variant="outline" size="sm" onClick={() => { setDateFrom(''); setDateTo(''); setTypeFilter('all'); setSortOrder('newest'); setSearchQuery(''); }}>
+              Limpar filtros
+            </Button>
+          </div>
+        </FadeIn>
+      ) : viewMode === 'list' ? (
         <div className="space-y-3">
-          {entries.map((entry) => {
+          {filteredEntries.map((entry) => {
             const dayTrades = entry.trades?.length > 0 ? entry.trades : (tradesByDay.get(entry.date) || []);
             const buys = dayTrades.filter(t => t.side === 'buy').length;
             const sells = dayTrades.filter(t => t.side === 'sell').length;
@@ -383,10 +744,10 @@ export default function JournalPage() {
             );
           })}
         </div>
-      )}
+      ) : null}
 
-      {/* Trading days without entries — suggest journaling */}
-      {tradingDays.length > 0 && entries.length > 0 && (
+      {/* Trading days without entries (list view only) */}
+      {viewMode === 'list' && tradingDays.length > 0 && entries.length > 0 && (
         <FadeIn delay={0.15}>
           <div className="border border-border bg-card p-5">
             <p className="text-xs font-medium mb-3">Dias sem anotações</p>

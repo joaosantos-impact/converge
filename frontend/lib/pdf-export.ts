@@ -11,6 +11,8 @@ interface SaleEventPDF {
   isTaxFree: boolean;
   taxFreePortion: number;
   taxablePortion: number;
+  /** Resumo das compras associadas (datas ou anos) para IRS */
+  comprasSummary?: string;
 }
 
 interface TaxReportData {
@@ -191,9 +193,9 @@ export function generateTaxReportPDF(data: TaxReportData): void {
     doc.text(`Vendas Realizadas (${data.sales.length})`, 20, yPos);
     yPos += 10;
 
-    // Table header
-    const saleColW = [25, 30, 25, 25, 25, 22, 22];
-    const saleHeaders = ['Data', 'Par', 'Receita', 'Custo FIFO', 'P&L', 'Dias', 'Estado'];
+    // Table header (+ coluna Compra(s) para IRS); larguras totais <= pageWidth - 40 - 22
+    const saleColW = [16, 22, 16, 16, 16, 12, 18, 22];
+    const saleHeaders = ['Data', 'Par', 'Receita', 'Custo', 'P&L', 'Dias', 'Estado', 'Compra(s)'];
 
     doc.setFillColor(245, 245, 245);
     doc.rect(20, yPos, pageWidth - 40, 8, 'F');
@@ -251,6 +253,13 @@ export function generateTaxReportPDF(data: TaxReportData): void {
       doc.setFont('helvetica', 'bold');
       doc.text(efectivoIsento ? 'Isento' : 'Tributável', xP, yPos + 4);
       doc.setFont('helvetica', 'normal');
+      xP += saleColW[6];
+
+      // Compra(s) associada(s) — data(s) ou ano(s) para IRS
+      doc.setTextColor(...mutedColor);
+      doc.setFontSize(6);
+      doc.text(sale.comprasSummary ?? '—', xP, yPos + 4);
+      doc.setFontSize(7);
 
       yPos += 8;
     }

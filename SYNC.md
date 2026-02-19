@@ -60,8 +60,37 @@ Isto permite gráficos de evolução do património e métricas de performance.
 
 - **API:** `POST /api/sync` (utilizador autenticado).
 - **Frontend:** botão “Sincronizar” nas Integrações, no Portfolio ou no dashboard.
-- Comportamento: corre `triggerSync(userId)` para esse utilizador (todas as contas ativas).
+- **Comportamento:** Com Redis o job é enfileirado e a API devolve logo; sem Redis o sync corre em background e a API devolve `{ status: 'started' }`. O frontend não bloqueia: mostra "A sincronizar..." e faz polling até conclusão, depois invalida portfolio/trades/contas.
 - **Cooldown:** não é possível disparar um novo sync manual antes de passarem **5 minutos** desde o início do último. Se tentar antes, a API devolve `429` com indicação do tempo de espera.
+
+### Redis no Railway (fila de sync)
+
+Com **Redis**, o sync manual é enfileirado (BullMQ) e a API devolve imediatamente; workers processam em background. Sem Redis, o backend usa o modo direct (sync em background no mesmo processo).
+
+**No Railway**
+
+1. No teu projeto, clica em **"+ New"** → **"Database"** → **"Add Redis"** (ou usa o [template Redis](https://railway.com/template/redis) se preferires).
+2. Depois de criar o serviço Redis, abre-o e vai a **"Variables"** ou **"Connect"**. O Railway expõe normalmente:
+   - `REDIS_URL` ou `REDIS_PRIVATE_URL` (URL interna, ex.: `redis://default:xxx@redis.railway.internal:6379`)
+   - Em alguns planos pode ser `rediss://` (TLS); o backend já suporta ambos.
+3. No teu **serviço do backend** (NestJS):
+   - **Variables** → **"+ New Variable"** ou **"Add Variable Reference"**.
+   - Cria (ou referencia) a variável **`REDIS_URL`** com o valor da URL do Redis.
+   - Se o Redis estiver no mesmo projeto, podes usar **"Reference"** e escolher a variável do serviço Redis (ex.: `${{Redis.REDIS_PRIVATE_URL}}` ou o nome que o Railway der). Caso contrário, cola a URL manualmente.
+4. Faz **redeploy** do backend para carregar a nova variável.
+
+**No backend (código)**
+
+- Não é preciso alterar código. O backend lê **`REDIS_URL`** do ambiente (ConfigService / `process.env`).
+- Se `REDIS_URL` estiver definido e for `redis://` ou `rediss://`, o `SyncModule` usa BullMQ e o **SyncQueueService**; caso contrário usa o **SyncQueueDirectService**.
+- Suportado: `redis://` (sem TLS), `rediss://` (com TLS), com `username` e `password` na URL se o Redis exigir.
+
+**Verificar**
+
+- Após deploy, ao carregares em "Sincronizar", a API deve responder logo com `{ jobId, status: 'queued' }` em vez de esperar o sync terminar.
+- Nos logs do backend não deve aparecer "Direct sync (no Redis)".
+
+---
 
 ### Sincronização automática (cron)
 
@@ -86,6 +115,14 @@ Para cada `ExchangeAccount` ativa:
 7. Atualizar `ExchangeAccount.lastSyncAt` (e opcionalmente `lastSyncTradeCount`).
 
 Se os trades falharem (ex.: rate limit), os saldos já ficaram gravados; o `lastSyncAt` é atualizado na mesma para não repetir saldos desnecessariamente. O próximo sync volta a tentar trades a partir do último conhecido.
+
+---
+
+## Performance
+
+- **Contas em paralelo:** até 2 contas são sincronizadas em simultâneo (`SYNC_ACCOUNTS_CONCURRENCY`) para reduzir tempo total quando o utilizador tem várias exchanges, mantendo risco de rate limit baixo.
+- **Saldos:** upserts de `Balance` são feitos em chunks de 15 em paralelo em vez de sequencial.
+- **Trades (CCXT):** cada conta faz `fetchMyTrades` em batches de 4 símbolos com 400 ms entre batches (ajustável em `ccxt.service.ts`). Em primeira sincronização com muitos ativos, a maior parte do tempo é aqui; sincronizações incrementais são mais rápidas.
 
 ---
 

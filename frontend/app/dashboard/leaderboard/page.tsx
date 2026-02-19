@@ -39,7 +39,7 @@ export default function LeaderboardPage() {
   }, [session, isPending, router]);
 
   useEffect(() => {
-    if (leaderboardError) toast.error('Erro ao carregar leaderboard');
+    if (leaderboardError) toast.error(leaderboardError.message || 'Erro ao carregar leaderboard');
   }, [leaderboardError]);
 
   const [followingLoading, setFollowingLoading] = useState<string | null>(null);

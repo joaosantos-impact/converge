@@ -27,7 +27,16 @@ import { buildAssetPriceMap, feeToUsd, processFIFO, type BuyLot } from '@/lib/fi
 import { toast } from 'sonner';
 import { FadeIn } from '@/components/animations';
 import { AssetIcon } from '@/components/AssetIcon';
-import { ChevronLeft, ChevronRight, ExternalLink, Info } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, Info, Mail } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Tooltip,
   TooltipContent,
@@ -77,6 +86,16 @@ export default function TaxesPage() {
   const [exporting, setExporting] = useState(false);
   const [salesPage, setSalesPage] = useState(1);
   const setSelectedYear = (v: string) => { setSelectedYearRaw(v); setSalesPage(1); };
+  // Filters for realized sales
+  const [salesDateFrom, setSalesDateFrom] = useState('');
+  const [salesDateTo, setSalesDateTo] = useState('');
+  const [salesAsset, setSalesAsset] = useState<string>('all');
+  const [salesPnlMin, setSalesPnlMin] = useState('');
+  const [salesPnlMax, setSalesPnlMax] = useState('');
+  const [salesStatus, setSalesStatus] = useState<'all' | 'isento' | 'tributável'>('all');
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [accountantEmail, setAccountantEmail] = useState('');
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   const SALES_PER_PAGE = 10;
 
@@ -206,15 +225,68 @@ export default function TaxesPage() {
     };
   }, [allTrades, selectedYear, portfolioData]);
 
+  const salesAssets = useMemo(() => {
+    const set = new Set(salesInYear.map(s => s.baseAsset));
+    return Array.from(set).sort();
+  }, [salesInYear]);
+
+  const filteredSales = useMemo(() => {
+    let list = salesInYear;
+    if (salesDateFrom) {
+      const from = new Date(salesDateFrom);
+      list = list.filter(s => s.date >= from);
+    }
+    if (salesDateTo) {
+      const to = new Date(salesDateTo);
+      to.setHours(23, 59, 59, 999);
+      list = list.filter(s => s.date <= to);
+    }
+    if (salesAsset !== 'all') {
+      list = list.filter(s => s.baseAsset === salesAsset);
+    }
+    if (salesPnlMin !== '') {
+      const v = parseFloat(salesPnlMin);
+      if (!Number.isNaN(v)) list = list.filter(s => s.realizedPnL >= v);
+    }
+    if (salesPnlMax !== '') {
+      const v = parseFloat(salesPnlMax);
+      if (!Number.isNaN(v)) list = list.filter(s => s.realizedPnL <= v);
+    }
+    if (salesStatus === 'isento') {
+      list = list.filter(s => s.isTaxFree || s.realizedPnL < 0);
+    } else if (salesStatus === 'tributável') {
+      list = list.filter(s => !s.isTaxFree && s.realizedPnL >= 0);
+    }
+    return list;
+  }, [salesInYear, salesDateFrom, salesDateTo, salesAsset, salesPnlMin, salesPnlMax, salesStatus]);
+
+  // Formata compras associadas a uma venda (para IRS: compra(s) que deram origem ao custo FIFO)
+  const formatComprasForCSV = (s: typeof salesInYear[0]) => {
+    const lots = s.lots ?? [];
+    if (lots.length === 0) return { dataCompras: '', anoCompras: '', detalheCompras: '' };
+    const dataCompras = lots.map(l => l.buyDate.toISOString().split('T')[0]).join('; ');
+    const anoCompras = [...new Set(lots.map(l => l.buyDate.getFullYear()))].sort((a, b) => a - b).join('; ');
+    const detalheCompras = lots.map(l => `${l.buyDate.toISOString().split('T')[0]} | ${l.amount.toFixed(8)} | ${formatValue(l.costBasis)}`).join('; ');
+    return { dataCompras, anoCompras, detalheCompras };
+  };
+  const escapeCsvCell = (cell: string) => {
+    if (cell.includes(',') || cell.includes('"') || cell.includes('\n') || cell.includes(';')) {
+      return `"${String(cell).replace(/"/g, '""')}"`;
+    }
+    return cell;
+  };
+
   const exportCSV = () => {
     setExporting(true);
     try {
       const headers = [
-        'Data', 'Par', 'Exchange', 'Quantidade', 'Receita', 'Custo Base (FIFO)',
+        'Data Venda', 'Par', 'Exchange', 'Quantidade', 'Receita', 'Custo Base (FIFO)',
         'P&L Realizado', 'Dias Detenção', 'Isento (>365d)', 'P&L Isento', 'P&L Tributável', 'Estado',
+        'Data(s) Compra', 'Ano(s) Compra', 'Detalhe Compras (Data | Qtd | Custo)',
       ];
       const rows = salesInYear.map(s => {
         const efectivoIsento = s.isTaxFree || s.realizedPnL < 0;
+        const { dataCompras, anoCompras, detalheCompras } = formatComprasForCSV(s);
         return [
           s.date.toISOString().split('T')[0],
           s.symbol,
@@ -228,9 +300,12 @@ export default function TaxesPage() {
           formatValue(s.taxFreePortion),
           formatValue(s.taxablePortion),
           efectivoIsento ? 'ISENTO' : 'TRIBUTÁVEL',
+          dataCompras,
+          anoCompras,
+          detalheCompras,
         ];
       });
-      const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const csv = [headers.join(','), ...rows.map(r => r.map(escapeCsvCell).join(','))].join('\n');
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -266,18 +341,27 @@ export default function TaxesPage() {
           totalValue,
           totalInvested,
         },
-        sales: salesInYear.map(s => ({
-          date: s.date,
-          symbol: s.symbol,
-          amount: s.amount,
-          revenue: s.revenue,
-          costBasis: s.costBasis,
-          realizedPnL: s.realizedPnL,
-          holdingDays: s.holdingDays,
-          isTaxFree: s.isTaxFree,
-          taxFreePortion: s.taxFreePortion,
-          taxablePortion: s.taxablePortion,
-        })),
+        sales: salesInYear.map(s => {
+          const lots = s.lots ?? [];
+          const comprasSummary = lots.length === 0
+            ? undefined
+            : lots.length === 1
+              ? lots[0].buyDate.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' })
+              : [...new Set(lots.map(l => l.buyDate.getFullYear()))].sort((a, b) => a - b).join(', ');
+          return {
+            date: s.date,
+            symbol: s.symbol,
+            amount: s.amount,
+            revenue: s.revenue,
+            costBasis: s.costBasis,
+            realizedPnL: s.realizedPnL,
+            holdingDays: s.holdingDays,
+            isTaxFree: s.isTaxFree,
+            taxFreePortion: s.taxFreePortion,
+            taxablePortion: s.taxablePortion,
+            comprasSummary,
+          };
+        }),
         assets: holdings.map(a => ({
           asset: a.asset,
           firstPurchase: a.firstPurchase,
@@ -295,6 +379,65 @@ export default function TaxesPage() {
       toast.error('Erro ao exportar PDF');
     } finally {
       setExporting(false);
+    }
+  };
+
+  const sendReportToAccountant = async () => {
+    const email = accountantEmail.trim();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error('Introduz um email válido');
+      return;
+    }
+    setSendingEmail(true);
+    try {
+      const headers = [
+        'Data Venda', 'Par', 'Exchange', 'Quantidade', 'Receita', 'Custo Base (FIFO)',
+        'P&L Realizado', 'Dias Detenção', 'Isento (>365d)', 'P&L Isento', 'P&L Tributável', 'Estado',
+        'Data(s) Compra', 'Ano(s) Compra', 'Detalhe Compras (Data | Qtd | Custo)',
+      ];
+      const rows = salesInYear.map(s => {
+        const efectivoIsento = s.isTaxFree || s.realizedPnL < 0;
+        const { dataCompras, anoCompras, detalheCompras } = formatComprasForCSV(s);
+        return [
+          s.date.toISOString().split('T')[0],
+          s.symbol,
+          s.exchange,
+          s.amount.toFixed(8),
+          formatValue(s.revenue),
+          formatValue(s.costBasis),
+          formatValue(s.realizedPnL),
+          s.holdingDays.toString(),
+          s.isTaxFree ? 'Sim' : 'Não',
+          formatValue(s.taxFreePortion),
+          formatValue(s.taxablePortion),
+          efectivoIsento ? 'ISENTO' : 'TRIBUTÁVEL',
+          dataCompras,
+          anoCompras,
+          detalheCompras,
+        ];
+      });
+      const reportCsv = [headers.join(','), ...rows.map(r => r.map(escapeCsvCell).join(','))].join('\n');
+      const res = await fetch('/api/taxes/send-report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          year: parseInt(selectedYear),
+          reportCsv,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast.success('Email enviado para ' + email);
+        setEmailDialogOpen(false);
+        setAccountantEmail('');
+      } else {
+        toast.error(data?.message || data?.error || 'Erro ao enviar email');
+      }
+    } catch {
+      toast.error('Erro ao enviar email');
+    } finally {
+      setSendingEmail(false);
     }
   };
 
@@ -329,12 +472,16 @@ export default function TaxesPage() {
                 ))}
               </SelectContent>
             </Select>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
             <Button onClick={exportCSV} disabled={exporting} variant="outline" className="h-9" aria-label="Exportar relatório CSV">
               CSV
             </Button>
             <Button onClick={exportPDF} disabled={exporting} className="h-9" aria-label="Exportar relatório PDF">
               PDF
+            </Button>
+            <Button onClick={() => setEmailDialogOpen(true)} disabled={exporting} variant="outline" className="h-9" aria-label="Enviar por email para contabilista">
+              <Mail className="w-3.5 h-3.5 mr-1.5" />
+              Enviar para contabilista
             </Button>
             </div>
           </div>
@@ -495,12 +642,12 @@ export default function TaxesPage() {
 
           {/* Realized Sales Detail (FIFO) */}
           <div className="border border-border bg-card min-w-0">
-            <div className="p-4 border-b border-border">
+            <div className="p-4 border-b border-border space-y-3">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <p className="font-medium text-sm min-w-0">Vendas Realizadas em {selectedYear}</p>
                 <div className="flex items-center gap-3 shrink-0">
-                  <p className="text-xs text-muted-foreground">{salesInYear.length} vendas</p>
-                  {salesInYear.length > SALES_PER_PAGE && (
+                  <p className="text-xs text-muted-foreground">{filteredSales.length} vendas</p>
+                  {filteredSales.length > SALES_PER_PAGE && (
                     <div className="flex items-center gap-1">
                       <Button
                         variant="ghost"
@@ -512,14 +659,14 @@ export default function TaxesPage() {
                         <ChevronLeft className="h-4 w-4" />
                       </Button>
                       <span className="text-xs text-muted-foreground min-w-[4rem] text-center">
-                        {salesPage} / {Math.ceil(salesInYear.length / SALES_PER_PAGE)}
+                        {salesPage} / {Math.ceil(filteredSales.length / SALES_PER_PAGE)}
                       </span>
                       <Button
                         variant="ghost"
                         size="sm"
                         className="h-7 w-7 p-0"
-                        onClick={() => setSalesPage((p) => Math.min(Math.ceil(salesInYear.length / SALES_PER_PAGE), p + 1))}
-                        disabled={salesPage >= Math.ceil(salesInYear.length / SALES_PER_PAGE)}
+                        onClick={() => setSalesPage((p) => Math.min(Math.ceil(filteredSales.length / SALES_PER_PAGE), p + 1))}
+                        disabled={salesPage >= Math.ceil(filteredSales.length / SALES_PER_PAGE)}
                       >
                         <ChevronRight className="h-4 w-4" />
                       </Button>
@@ -527,14 +674,65 @@ export default function TaxesPage() {
                   )}
                 </div>
               </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="date"
+                  value={salesDateFrom}
+                  onChange={(e) => { setSalesDateFrom(e.target.value); setSalesPage(1); }}
+                  className="h-9 rounded-md border border-input bg-background px-2 text-xs"
+                />
+                <input
+                  type="date"
+                  value={salesDateTo}
+                  onChange={(e) => { setSalesDateTo(e.target.value); setSalesPage(1); }}
+                  className="h-9 rounded-md border border-input bg-background px-2 text-xs"
+                />
+                <Select value={salesAsset} onValueChange={(v) => { setSalesAsset(v); setSalesPage(1); }}>
+                  <SelectTrigger className="h-9 min-w-[100px] text-xs">
+                    <SelectValue placeholder="Asset" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os ativos</SelectItem>
+                    {salesAssets.map((a) => (
+                      <SelectItem key={a} value={a}>{a}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={salesStatus} onValueChange={(v) => { setSalesStatus(v as 'all' | 'isento' | 'tributável'); setSalesPage(1); }}>
+                  <SelectTrigger className="h-9 min-w-[120px] text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Estado: Todos</SelectItem>
+                    <SelectItem value="isento">Isento</SelectItem>
+                    <SelectItem value="tributável">Tributável</SelectItem>
+                  </SelectContent>
+                </Select>
+                <input
+                  type="number"
+                  placeholder="P&L mín."
+                  value={salesPnlMin}
+                  onChange={(e) => { setSalesPnlMin(e.target.value); setSalesPage(1); }}
+                  className="h-9 w-24 rounded-md border border-input bg-background px-2 text-xs"
+                />
+                <input
+                  type="number"
+                  placeholder="P&L máx."
+                  value={salesPnlMax}
+                  onChange={(e) => { setSalesPnlMax(e.target.value); setSalesPage(1); }}
+                  className="h-9 w-24 rounded-md border border-input bg-background px-2 text-xs"
+                />
+              </div>
             </div>
-            {salesInYear.length === 0 ? (
+            {filteredSales.length === 0 ? (
               <div className="p-8 text-center">
-                <p className="text-sm text-muted-foreground">Sem vendas em {selectedYear}</p>
+                <p className="text-sm text-muted-foreground">
+                  {salesInYear.length === 0 ? `Sem vendas em ${selectedYear}` : 'Nenhuma venda corresponde aos filtros'}
+                </p>
               </div>
             ) : (
               <div className="overflow-x-auto min-w-0">
-                <Table className="min-w-[640px]">
+                <Table className="min-w-[720px]">
                   <TableHeader>
                     <TableRow className="hover:bg-transparent">
                       <TableHead className="pl-4">Data</TableHead>
@@ -544,13 +742,24 @@ export default function TaxesPage() {
                       <TableHead className="text-right">Custo (FIFO)</TableHead>
                       <TableHead className="text-right">P&L</TableHead>
                       <TableHead className="text-right">Detenção</TableHead>
+                      <TableHead className="text-left">Compra(s)</TableHead>
                       <TableHead className="text-right pr-4">Estado</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {salesInYear
+                    {filteredSales
                       .slice((salesPage - 1) * SALES_PER_PAGE, salesPage * SALES_PER_PAGE)
-                      .map((sale, idx) => (
+                      .map((sale, idx) => {
+                        const lots = sale.lots ?? [];
+                        const comprasLabel = lots.length === 0
+                          ? '—'
+                          : lots.length === 1
+                            ? lots[0].buyDate.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' })
+                            : `${lots.length} lotes: ${[...new Set(lots.map(l => l.buyDate.getFullYear()))].sort((a, b) => a - b).join(', ')}`;
+                        const comprasTooltip = lots.length === 0
+                          ? ''
+                          : lots.map(l => `${l.buyDate.toLocaleDateString('pt-PT')} — ${l.amount.toFixed(6)} @ ${formatValue(l.costBasis)}`).join('\n');
+                        return (
                       <TableRow key={`${sale.symbol}-${sale.date.getTime()}-${idx}`} className="group">
                         <TableCell className="pl-4 text-xs text-muted-foreground whitespace-nowrap">
                           {sale.date.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' })}
@@ -577,6 +786,24 @@ export default function TaxesPage() {
                         </TableCell>
                         <TableCell className="text-right text-xs text-muted-foreground">
                           {sale.holdingDays}d
+                        </TableCell>
+                        <TableCell className="text-left">
+                          {comprasTooltip ? (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-xs text-muted-foreground cursor-help">
+                                    {comprasLabel}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="left" className="max-w-[280px] whitespace-pre-line text-xs">
+                                  {comprasTooltip}
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">{comprasLabel}</span>
+                          )}
                         </TableCell>
                         <TableCell className="text-right pr-4">
                           {sale.isTaxFree || sale.realizedPnL < 0 ? (
@@ -610,7 +837,7 @@ export default function TaxesPage() {
                           )}
                         </TableCell>
                       </TableRow>
-                    ))}
+                    );})}
                   </TableBody>
                 </Table>
               </div>
@@ -796,6 +1023,38 @@ export default function TaxesPage() {
           </div>
         </div>
       </div>
+
+      <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Enviar relatório para contabilista</DialogTitle>
+            <DialogDescription>
+              Envia por email o ficheiro CSV com todas as compras e vendas do ano {selectedYear} para o endereço que indicares.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <label htmlFor="accountant-email" className="text-xs font-medium text-muted-foreground block mb-1.5">
+              Email da contabilista
+            </label>
+            <Input
+              id="accountant-email"
+              type="email"
+              placeholder="contabilista@exemplo.pt"
+              value={accountantEmail}
+              onChange={(e) => setAccountantEmail(e.target.value)}
+              className="h-9"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailDialogOpen(false)} disabled={sendingEmail}>
+              Cancelar
+            </Button>
+            <Button onClick={sendReportToAccountant} disabled={sendingEmail}>
+              {sendingEmail ? 'A enviar…' : 'Enviar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

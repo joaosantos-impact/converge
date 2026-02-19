@@ -4,8 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from '@/lib/auth-client';
 import { useInvalidateExchangeAccounts } from '@/hooks/use-exchange-accounts';
-import { useAutoSync } from '@/hooks/use-auto-sync';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -69,10 +68,9 @@ export default function ExchangesPage() {
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: true,
   });
+  const queryClient = useQueryClient();
   const invalidateAccounts = useInvalidateExchangeAccounts();
-  const { canSync } = useAutoSync();
-  const [syncing, setSyncing] = useState<string | null>(null);
-  
+
   // Dialog states
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -138,32 +136,14 @@ export default function ExchangesPage() {
       if (response.ok) {
         toast.success('Exchange removida');
         invalidateAccounts();
+        queryClient.invalidateQueries({ queryKey: ['portfolio'] });
+        queryClient.invalidateQueries({ queryKey: ['trades'] });
       }
     } catch {
       toast.error('Erro ao remover');
     } finally {
       setDeleteDialogOpen(false);
       setAccountToDelete(null);
-    }
-  };
-
-  const handleSync = async (id: string) => {
-    setSyncing(id);
-    try {
-      const response = await fetch('/api/sync', { method: 'POST' });
-      const data = await response.json().catch(() => ({}));
-      if (response.ok) {
-        toast.success('Sincronização completa');
-        invalidateAccounts();
-      } else if (response.status === 429) {
-        toast.error(data?.error || 'Aguarda antes de sincronizar novamente');
-      } else {
-        toast.error(data?.error || 'Erro na sincronização');
-      }
-    } catch {
-      toast.error('Erro na sincronização');
-    } finally {
-      setSyncing(null);
     }
   };
 
@@ -237,18 +217,6 @@ export default function ExchangesPage() {
                   <span>API: {account.apiKey.slice(0, 8)}...</span>
                   <span>{account.isActive ? 'Ativo' : 'Inativo'}</span>
                 </div>
-              </div>
-              <div className="px-4 py-3 border-t border-border">
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  onClick={() => handleSync(account.id)}
-                  disabled={syncing === account.id || !canSync}
-                  className="w-full"
-                  title={!canSync ? 'Aguarda o cooldown antes de sincronizar' : undefined}
-                >
-                  {syncing === account.id ? 'A sincronizar...' : 'Sincronizar'}
-                </Button>
               </div>
             </div>
           ))}

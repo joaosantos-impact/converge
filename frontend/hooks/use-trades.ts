@@ -51,9 +51,29 @@ async function fetchTrades(params: TradesParams = {}): Promise<TradesResponse> {
   if (params.page) sp.set('page', String(params.page));
   if (params.limit) sp.set('limit', String(params.limit));
 
-  const res = await fetch(`/api/trades?${sp}`);
-  if (!res.ok) throw new Error('Failed to fetch trades');
-  return res.json();
+  const res = await fetch(`/api/trades?${sp}`, { credentials: 'include' });
+  const parseBody = async <T>(fallback: T): Promise<T> => {
+    const text = await res.text();
+    if (!text?.trim()) return fallback;
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      return fallback;
+    }
+  };
+  if (!res.ok) {
+    const body = await parseBody({} as Record<string, unknown>);
+    const msg = (body?.message ?? body?.error) || res.statusText || `HTTP ${res.status}`;
+    throw new Error(typeof msg === 'string' ? msg : String(msg));
+  }
+  return parseBody({
+    trades: [],
+    total: 0,
+    page: 1,
+    limit: params.limit ?? 20,
+    totalPages: 0,
+    exchanges: [],
+  });
 }
 
 /**

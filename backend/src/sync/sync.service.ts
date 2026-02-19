@@ -26,6 +26,9 @@ const FALLBACK_BASE_ASSETS = [
   'NEAR', 'APT', 'ARB', 'OP', 'INJ', 'SUI', 'SEI', 'TIA', 'IMX', 'STX',
 ];
 
+/** Max accounts synced in parallel to avoid rate limits when user has multiple exchanges */
+const SYNC_ACCOUNTS_CONCURRENCY = 2;
+
 @Injectable()
 export class SyncService {
   private readonly logger = new Logger(SyncService.name);
@@ -161,13 +164,20 @@ export class SyncService {
       let successful = 0;
       let failed = 0;
 
-      for (const account of accounts) {
-        try {
-          await this.syncAccount(account);
-          successful++;
-        } catch (err) {
-          this.logger.error(`Sync failed for ${account.name}:`, err);
-          failed++;
+      for (let i = 0; i < accounts.length; i += SYNC_ACCOUNTS_CONCURRENCY) {
+        const chunk = accounts.slice(i, i + SYNC_ACCOUNTS_CONCURRENCY);
+        const results = await Promise.allSettled(
+          chunk.map((account) => this.syncAccount(account)),
+        );
+        for (let j = 0; j < results.length; j++) {
+          if (results[j].status === 'fulfilled') successful++;
+          else {
+            failed++;
+            this.logger.error(
+              `Sync failed for ${chunk[j].name}:`,
+              (results[j] as PromiseRejectedResult).reason,
+            );
+          }
         }
       }
 
@@ -282,36 +292,40 @@ export class SyncService {
     // 2. Fetch and UPSERT balances (fix: no more duplicates)
     const balances = await this.ccxt.fetchBalance(exchange);
 
+    const BALANCE_UPSERT_CHUNK = 15;
     try {
       if (balances.length > 0) {
-        for (const balance of balances) {
-          const usdValue = this.ccxt.getUsdValueFromTickers(
-            tickerMap,
-            balance.asset,
-            balance.total,
+        for (let i = 0; i < balances.length; i += BALANCE_UPSERT_CHUNK) {
+          const chunk = balances.slice(i, i + BALANCE_UPSERT_CHUNK);
+          await Promise.all(
+            chunk.map((balance) => {
+              const usdValue = this.ccxt.getUsdValueFromTickers(
+                tickerMap,
+                balance.asset,
+                balance.total,
+              );
+              const data = {
+                free: balance.free,
+                locked: balance.locked,
+                total: balance.total,
+                usdValue,
+              };
+              return this.prisma.balance.upsert({
+                where: {
+                  exchangeAccountId_asset: {
+                    exchangeAccountId: account.id,
+                    asset: balance.asset,
+                  },
+                },
+                update: data,
+                create: {
+                  exchangeAccountId: account.id,
+                  asset: balance.asset,
+                  ...data,
+                },
+              });
+            }),
           );
-
-          const data = {
-            free: balance.free,
-            locked: balance.locked,
-            total: balance.total,
-            usdValue,
-          };
-
-          await this.prisma.balance.upsert({
-            where: {
-              exchangeAccountId_asset: {
-                exchangeAccountId: account.id,
-                asset: balance.asset,
-              },
-            },
-            update: data,
-            create: {
-              exchangeAccountId: account.id,
-              asset: balance.asset,
-              ...data,
-            },
-          });
         }
 
         // Remove balances for assets that no longer exist on the exchange

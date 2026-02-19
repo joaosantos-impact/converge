@@ -19,6 +19,7 @@ import { AdminModule } from './admin/admin.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { PricesModule } from './prices/prices.module';
 import { TransfersModule } from './transfers/transfers.module';
+import { TaxesModule } from './taxes/taxes.module';
 
 @Controller('api')
 class HealthController {
@@ -58,6 +59,7 @@ class HealthController {
     ReviewsModule,
     PricesModule,
     TransfersModule,
+    TaxesModule,
   ],
   controllers: [HealthController],
 })

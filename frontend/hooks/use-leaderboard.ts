@@ -23,10 +23,32 @@ interface LeaderboardResponse {
   perPage: number;
 }
 
+async function parseJsonSafe<T>(res: Response, fallback: T): Promise<T> {
+  const text = await res.text();
+  if (!text?.trim()) return fallback;
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return fallback;
+  }
+}
+
 async function fetchLeaderboard(period: string, page: number): Promise<LeaderboardResponse> {
-  const res = await fetch(`/api/leaderboard?period=${period}&page=${page}&perPage=20`);
-  if (!res.ok) throw new Error('Failed to fetch leaderboard');
-  return res.json();
+  const res = await fetch(`/api/leaderboard?period=${period}&page=${page}&perPage=20`, {
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const body = await parseJsonSafe(res, {} as Record<string, unknown>);
+    const msg = (body?.message ?? body?.error) || res.statusText || `HTTP ${res.status}`;
+    throw new Error(typeof msg === 'string' ? msg : String(msg));
+  }
+  return parseJsonSafe(res, {
+    rankings: [],
+    participating: false,
+    totalCount: 0,
+    page: 1,
+    perPage: 20,
+  });
 }
 
 /**

@@ -4,7 +4,7 @@ import type { AddJobResult } from './sync-queue.service';
 
 /**
  * Fallback implementation when Redis is not available.
- * Runs sync directly instead of enqueueing.
+ * Starts sync in background and returns immediately so the frontend does not block.
  */
 @Injectable()
 export class SyncQueueDirectService {
@@ -13,23 +13,31 @@ export class SyncQueueDirectService {
   constructor(private readonly syncService: SyncService) {}
 
   async addJob(userId: string, skipCooldown = false): Promise<AddJobResult> {
-    this.logger.debug(`Direct sync (no Redis) for user ${userId}`);
+    this.logger.debug(`Direct sync (no Redis) for user ${userId} — starting in background`);
     try {
-      const result = await this.syncService.triggerSync(userId, {
-        skipCooldown,
-      });
-      if (
-        result &&
-        typeof result === 'object' &&
-        'error' in result &&
-        'statusCode' in result
-      ) {
-        return {
-          error: (result as { error: string }).error,
-          statusCode: (result as { statusCode: number }).statusCode,
-        };
+      if (!skipCooldown) {
+        const status = await this.syncService.getSyncStatus(userId);
+        if (!status.canSync && status.nextSyncAt) {
+          const retryAfter = Math.max(
+            0,
+            status.nextSyncAt.getTime() - Date.now(),
+          );
+          return {
+            error: `Aguarda antes de sincronizar novamente.`,
+            statusCode: 429,
+            retryAfter,
+          };
+        }
       }
-      return { useDirect: true, success: result };
+
+      // Run sync in background; response returns immediately so UI does not block
+      this.syncService
+        .triggerSync(userId, { skipCooldown })
+        .catch((err) =>
+          this.logger.error(`Background sync failed for user ${userId}:`, err),
+        );
+
+      return { useDirect: true, success: true, status: 'started' };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return { error: msg, statusCode: 500 };
