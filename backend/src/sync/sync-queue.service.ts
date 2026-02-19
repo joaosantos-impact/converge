@@ -37,7 +37,7 @@ export class SyncQueueService implements OnModuleDestroy {
    * When Redis is not available, runs sync directly and returns result.
    */
   async addJob(userId: string, skipCooldown = false): Promise<AddJobResult> {
-    const jobId = `sync:${userId}`;
+    const jobId = `sync-${userId}`;
 
     try {
       const existing = await this.queue.getJob(jobId);
@@ -77,7 +77,7 @@ export class SyncQueueService implements OnModuleDestroy {
    * Get job status for a user. Returns 'queued', 'active', or null.
    */
   async getJobStatus(userId: string): Promise<'queued' | 'active' | null> {
-    const jobId = `sync:${userId}`;
+    const jobId = `sync-${userId}`;
     try {
       const job = await this.queue.getJob(jobId);
       if (!job) return null;

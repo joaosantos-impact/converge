@@ -8,10 +8,15 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private pool: Pool;
 
   constructor() {
-    const connectionString = process.env.DATABASE_URL;
+    let connectionString = process.env.DATABASE_URL;
     if (!connectionString) {
       throw new Error('DATABASE_URL environment variable is not set');
     }
+    // Explicit verify-full for prefer/require/verify-ca to avoid pg v9 sslmode semantics warning
+    connectionString = connectionString.replace(
+      /([?&])sslmode=(?:prefer|require|verify-ca)(?=&|$)/i,
+      '$1sslmode=verify-full',
+    );
 
     // Neon/serverless: release idle connections before server closes them (~5 min).
     // Keeps pool from handing out dead connections to CRON/API.
